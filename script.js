@@ -192,8 +192,8 @@ function beginDrag(event, piece) {
 
   event.preventDefault();
 
-  const boardCellSize = getBoardCellSize();
-  const dragCellSize = Math.max(28, boardCellSize - 8);
+  const { cellSize } = getBoardMetrics();
+  const dragCellSize = Math.max(28, cellSize - 8);
   const bounds = getShapeBounds(piece.cells);
   const anchor = {
     x: Math.floor(bounds.width / 2),
@@ -268,15 +268,13 @@ function updateDragPosition(clientX, clientY) {
   dragState.avatar.style.transform = `translate(${clientX + 10}px, ${clientY + 10}px)`;
 
   const boardRect = boardEl.getBoundingClientRect();
-  const boardCellSize = getBoardCellSize();
+  const { cellSize, gap, paddingLeft, paddingTop, gridSize } = getBoardMetrics();
+  const localX = clientX - boardRect.left - paddingLeft;
+  const localY = clientY - boardRect.top - paddingTop;
+  const pointerInGrid =
+    localX >= 0 && localX <= gridSize && localY >= 0 && localY <= gridSize;
 
-  const pointerInBoard =
-    clientX >= boardRect.left &&
-    clientX <= boardRect.right &&
-    clientY >= boardRect.top &&
-    clientY <= boardRect.bottom;
-
-  if (!pointerInBoard) {
+  if (!pointerInGrid) {
     dragState.valid = false;
     dragState.previewCells = [];
     dragState.previewLines = { rows: [], cols: [] };
@@ -284,8 +282,9 @@ function updateDragPosition(clientX, clientY) {
     return;
   }
 
-  const col = Math.floor((clientX - boardRect.left) / boardCellSize) - dragState.anchor.x;
-  const row = Math.floor((clientY - boardRect.top) / boardCellSize) - dragState.anchor.y;
+  const step = cellSize + gap;
+  const col = Math.floor(localX / step) - dragState.anchor.x;
+  const row = Math.floor(localY / step) - dragState.anchor.y;
 
   dragState.col = col;
   dragState.row = row;
@@ -688,8 +687,18 @@ function clearLines(currentBoard, rows, cols) {
   });
 }
 
-function getBoardCellSize() {
-  return boardEl.getBoundingClientRect().width / BOARD_SIZE;
+function getBoardMetrics() {
+  const style = window.getComputedStyle(boardEl);
+  const cellSize = Number.parseFloat(style.getPropertyValue("--cell-size")) || 0;
+  const gap = Number.parseFloat(style.getPropertyValue("--cell-gap")) || 0;
+
+  return {
+    cellSize,
+    gap,
+    paddingLeft: Number.parseFloat(style.paddingLeft) || 0,
+    paddingTop: Number.parseFloat(style.paddingTop) || 0,
+    gridSize: BOARD_SIZE * cellSize + (BOARD_SIZE - 1) * gap
+  };
 }
 
 function loadBestScore() {

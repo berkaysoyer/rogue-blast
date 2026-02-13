@@ -101,8 +101,8 @@ p {
 }
 
 .board {
-  width: calc((var(--cell-size) * 8) + (var(--cell-gap) * 7));
-  height: calc((var(--cell-size) * 8) + (var(--cell-gap) * 7));
+  width: fit-content;
+  height: fit-content;
   display: grid;
   grid-template-columns: repeat(8, var(--cell-size));
   grid-template-rows: repeat(8, var(--cell-size));
