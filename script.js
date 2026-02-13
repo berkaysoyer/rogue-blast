@@ -7,7 +7,6 @@ const MULTI_LINE_BONUS_PER_EXTRA = 50;
 const BATCH_SIZE = 3;
 
 const SHAPES = [
-  { id: "single", cells: [[0, 0]] },
   { id: "domino_h", cells: [[0, 0], [1, 0]] },
   { id: "domino_v", cells: [[0, 0], [0, 1]] },
   { id: "line3_h", cells: [[0, 0], [1, 0], [2, 0]] },
