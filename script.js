@@ -1,8 +1,10 @@
 const BOARD_SIZE = 8;
 const TRAY_CELL_SIZE = 22;
 const STORAGE_KEY = "block-blast-mvp-best-score";
+const GENERATOR_CLEARS_STORAGE_KEY = "block-blast-mvp-generator-clears";
 const SCORE_PER_LINE = 100;
 const MULTI_LINE_BONUS_PER_EXTRA = 50;
+const BATCH_SIZE = 3;
 
 const SHAPES = [
   { id: "single", cells: [[0, 0]] },
@@ -33,12 +35,16 @@ const SHAPES = [
   { id: "u5", cells: [[0, 0], [2, 0], [0, 1], [1, 1], [2, 1]] },
   { id: "v5", cells: [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]] },
   { id: "zig5", cells: [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]] }
-];
+].map((shape) => ({
+  ...shape,
+  score: calculateShapeScore(shape.cells)
+}));
 
 const boardEl = document.getElementById("board");
 const trayEl = document.getElementById("tray");
 const scoreEl = document.getElementById("score");
 const bestScoreEl = document.getElementById("best-score");
+const plannerClearsToggleEl = document.getElementById("planner-clears-toggle");
 const restartBtn = document.getElementById("restart-btn");
 const overlayEl = document.getElementById("overlay");
 const finalScoreTextEl = document.getElementById("final-score-text");
@@ -49,6 +55,9 @@ let boardCells = [];
 let pieces = [];
 let score = 0;
 let bestScore = loadBestScore();
+let generationConfig = {
+  simulateLineClearsBetweenPicks: loadGenerationClearsSetting()
+};
 let pieceIdCounter = 0;
 let isGameOver = false;
 let dragState = null;
@@ -64,6 +73,12 @@ function init() {
 function bindControls() {
   restartBtn.addEventListener("click", startNewGame);
   playAgainBtn.addEventListener("click", startNewGame);
+
+  plannerClearsToggleEl.checked = generationConfig.simulateLineClearsBetweenPicks;
+  plannerClearsToggleEl.addEventListener("change", () => {
+    generationConfig.simulateLineClearsBetweenPicks = plannerClearsToggleEl.checked;
+    saveGenerationClearsSetting(generationConfig.simulateLineClearsBetweenPicks);
+  });
 }
 
 function buildBoardUi() {
@@ -362,76 +377,81 @@ function hasAnyMoves(currentBoard, activePieces) {
 }
 
 function generateBatch(currentBoard) {
-  const placeableShapes = analyzeShapeAvailability(currentBoard);
-  if (placeableShapes.length === 0) {
-    return [];
-  }
+  let bestAttempt = [];
 
-  let fallbackShapes = null;
-
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const candidate = buildBatchCandidate(placeableShapes, currentBoard);
-    if (!fallbackShapes) {
-      fallbackShapes = candidate;
-    }
-
-    if (isBatchSolvable(currentBoard, candidate)) {
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    const candidate = generateBatchAttempt(currentBoard);
+    if (candidate.length === BATCH_SIZE) {
       return candidate.map((shape) => ({
         id: nextPieceId(),
         used: false,
         cells: shape.cells
       }));
     }
+    if (candidate.length > bestAttempt.length) {
+      bestAttempt = candidate;
+    }
   }
 
-  return fallbackShapes.map((shape) => ({
+  if (bestAttempt.length > 0 && bestAttempt.length < BATCH_SIZE) {
+    const placeableOnCurrentBoard = SHAPES.filter((shape) =>
+      hasPlacement(currentBoard, shape.cells)
+    );
+    while (
+      bestAttempt.length < BATCH_SIZE &&
+      placeableOnCurrentBoard.length > 0
+    ) {
+      bestAttempt.push(pickShapeByScoreWeight(placeableOnCurrentBoard));
+    }
+  }
+
+  return bestAttempt.map((shape) => ({
     id: nextPieceId(),
     used: false,
     cells: shape.cells
   }));
 }
 
-function buildBatchCandidate(placeableShapes, currentBoard) {
-  const filled = currentBoard.reduce((acc, cell) => acc + cell, 0);
-  const occupancy = filled / (BOARD_SIZE * BOARD_SIZE);
-  const chosen = [];
+function generateBatchAttempt(currentBoard) {
+  const selected = [];
+  let planningBoard = currentBoard.slice();
 
-  for (let slot = 0; slot < 3; slot += 1) {
-    let pool = placeableShapes;
-    if (slot === 0) {
-      const clearFriendly = placeableShapes.filter((shape) => shape.clearPlacements > 0);
-      if (clearFriendly.length > 0 && Math.random() < 0.65) {
-        pool = clearFriendly;
-      }
+  for (let slot = 0; slot < BATCH_SIZE; slot += 1) {
+    const placeableShapes = SHAPES.filter((shape) =>
+      hasPlacement(planningBoard, shape.cells)
+    );
+    if (placeableShapes.length === 0) {
+      break;
     }
-    chosen.push(pickWeightedShape(pool, occupancy, chosen));
+
+    const chosenShape = pickShapeByScoreWeight(placeableShapes);
+    const designatedPlacement = findDesignatedPlacement(
+      planningBoard,
+      chosenShape.cells
+    );
+    if (!designatedPlacement) {
+      break;
+    }
+
+    selected.push(chosenShape);
+
+    planningBoard = applyGenerationPlacement(
+      planningBoard,
+      chosenShape.cells,
+      designatedPlacement.col,
+      designatedPlacement.row
+    );
   }
 
-  const hasLineFriendly = chosen.some((shape) => shape.clearPlacements > 0);
-  const availableFriendly = placeableShapes.filter((shape) => shape.clearPlacements > 0);
-  if (!hasLineFriendly && availableFriendly.length > 0) {
-    chosen[0] = pickWeightedShape(availableFriendly, occupancy, []);
-  }
-
-  return chosen;
+  return selected;
 }
 
-function pickWeightedShape(pool, occupancy, alreadyChosen) {
-  const weights = pool.map((shape) => {
-    const sizeScore = occupancy > 0.6 ? (6 - shape.cells.length) * 1.35 : (6 - shape.cells.length) * 0.65;
-    const clearScore = shape.clearPlacements > 0 ? 2.5 : 0;
-    const duplicateCount = alreadyChosen.filter((picked) => picked.id === shape.id).length;
-    const duplicatePenalty = duplicateCount > 0 ? Math.pow(0.55, duplicateCount) : 1;
-
-    const rawWeight = 1 + sizeScore + clearScore;
-    return Math.max(0.1, rawWeight) * duplicatePenalty;
-  });
-
-  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-  let roll = Math.random() * totalWeight;
+function pickShapeByScoreWeight(pool) {
+  const totalScore = pool.reduce((sum, shape) => sum + shape.score, 0);
+  let roll = Math.random() * totalScore;
 
   for (let i = 0; i < pool.length; i += 1) {
-    roll -= weights[i];
+    roll -= pool[i].score;
     if (roll <= 0) {
       return pool[i];
     }
@@ -440,69 +460,139 @@ function pickWeightedShape(pool, occupancy, alreadyChosen) {
   return pool[pool.length - 1];
 }
 
-function analyzeShapeAvailability(currentBoard) {
-  return SHAPES.map((shape) => {
-    const placements = listPlacements(currentBoard, shape.cells);
-    let clearPlacements = 0;
-    for (let i = 0; i < placements.length; i += 1) {
-      if (placements[i].clears > 0) {
-        clearPlacements += 1;
-      }
-    }
-
-    return {
-      id: shape.id,
-      cells: shape.cells,
-      placements,
-      clearPlacements
-    };
-  }).filter((shape) => shape.placements.length > 0);
-}
-
-function isBatchSolvable(currentBoard, batchShapes) {
-  const cache = new Map();
-  const remaining = [0, 1, 2];
-
-  return depthFirstSolve(currentBoard, batchShapes, remaining, cache);
-}
-
-function depthFirstSolve(currentBoard, batchShapes, remaining, cache) {
-  if (remaining.length === 0) {
-    return true;
+function findDesignatedPlacement(currentBoard, cells) {
+  const placements = listPlacements(currentBoard, cells);
+  if (placements.length === 0) {
+    return null;
   }
 
-  const key = `${currentBoard.join("")}:${remaining.join(",")}`;
-  if (cache.has(key)) {
-    return cache.get(key);
-  }
+  const targetCorner = getBusiestQuadrantCorner(currentBoard);
+  let bestPlacement = null;
 
-  for (let i = 0; i < remaining.length; i += 1) {
-    const pieceIndex = remaining[i];
-    const shape = batchShapes[pieceIndex];
-    const placements = listPlacements(currentBoard, shape.cells).sort(
-      (a, b) => b.clears - a.clears
+  for (let i = 0; i < placements.length; i += 1) {
+    const placement = placements[i];
+    const { nextBoard, lineCount } = simulatePlacement(
+      currentBoard,
+      cells,
+      placement.col,
+      placement.row
     );
-
-    const limitedPlacements = placements.slice(0, 28);
-    for (let j = 0; j < limitedPlacements.length; j += 1) {
-      const placement = limitedPlacements[j];
-      const { nextBoard } = simulatePlacement(
-        currentBoard,
-        shape.cells,
+    const candidate = {
+      col: placement.col,
+      row: placement.row,
+      distance: getPlacementDistanceToCorner(
+        cells,
         placement.col,
-        placement.row
-      );
+        placement.row,
+        targetCorner
+      ),
+      immediateClears: lineCount,
+      occupiedAfterMove: countOccupied(nextBoard)
+    };
 
-      const nextRemaining = remaining.filter((idx) => idx !== pieceIndex);
-      if (depthFirstSolve(nextBoard, batchShapes, nextRemaining, cache)) {
-        cache.set(key, true);
-        return true;
-      }
+    if (
+      !bestPlacement ||
+      comparePlacementCandidates(candidate, bestPlacement) < 0
+    ) {
+      bestPlacement = candidate;
     }
   }
 
-  cache.set(key, false);
-  return false;
+  return bestPlacement;
+}
+
+function comparePlacementCandidates(a, b) {
+  if (a.distance !== b.distance) {
+    return a.distance - b.distance;
+  }
+  if (a.immediateClears !== b.immediateClears) {
+    return b.immediateClears - a.immediateClears;
+  }
+  if (a.occupiedAfterMove !== b.occupiedAfterMove) {
+    return a.occupiedAfterMove - b.occupiedAfterMove;
+  }
+  if (a.row !== b.row) {
+    return a.row - b.row;
+  }
+  return a.col - b.col;
+}
+
+function getPlacementDistanceToCorner(cells, col, row, corner) {
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < cells.length; i += 1) {
+    const x = col + cells[i][0];
+    const y = row + cells[i][1];
+    const distance = Math.abs(x - corner.x) + Math.abs(y - corner.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+    }
+  }
+
+  return bestDistance;
+}
+
+function countOccupied(currentBoard) {
+  return currentBoard.reduce((sum, cell) => sum + cell, 0);
+}
+
+function getBusiestQuadrantCorner(currentBoard) {
+  const quadrants = [
+    {
+      id: "top-left",
+      count: countBlocksInQuadrant(currentBoard, 0, 3, 0, 3),
+      corner: { x: 0, y: 0 }
+    },
+    {
+      id: "top-right",
+      count: countBlocksInQuadrant(currentBoard, 4, 7, 0, 3),
+      corner: { x: 7, y: 0 }
+    },
+    {
+      id: "bottom-left",
+      count: countBlocksInQuadrant(currentBoard, 0, 3, 4, 7),
+      corner: { x: 0, y: 7 }
+    },
+    {
+      id: "bottom-right",
+      count: countBlocksInQuadrant(currentBoard, 4, 7, 4, 7),
+      corner: { x: 7, y: 7 }
+    }
+  ];
+
+  let maxCount = quadrants[0].count;
+  for (let i = 1; i < quadrants.length; i += 1) {
+    if (quadrants[i].count > maxCount) {
+      maxCount = quadrants[i].count;
+    }
+  }
+
+  const busiest = quadrants.filter((quadrant) => quadrant.count === maxCount);
+  const pick = busiest[Math.floor(Math.random() * busiest.length)];
+  return pick.corner;
+}
+
+function countBlocksInQuadrant(currentBoard, minX, maxX, minY, maxY) {
+  let count = 0;
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      count += currentBoard[toIndex(x, y)];
+    }
+  }
+  return count;
+}
+
+function applyGenerationPlacement(currentBoard, cells, col, row) {
+  if (generationConfig.simulateLineClearsBetweenPicks) {
+    return simulatePlacement(currentBoard, cells, col, row).nextBoard;
+  }
+
+  const nextBoard = currentBoard.slice();
+  for (let i = 0; i < cells.length; i += 1) {
+    const [dx, dy] = cells[i];
+    nextBoard[toIndex(col + dx, row + dy)] = 1;
+  }
+  return nextBoard;
 }
 
 function createPieceElement(cells, cellSize, className) {
@@ -552,6 +642,30 @@ function getShapeBounds(cells) {
   });
 
   return { width: maxX + 1, height: maxY + 1 };
+}
+
+function calculateShapeScore(cells) {
+  let perimeterEdges = 0;
+  const lookup = new Set(cells.map(([x, y]) => `${x},${y}`));
+  const neighbors = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1]
+  ];
+
+  for (let i = 0; i < cells.length; i += 1) {
+    const [x, y] = cells[i];
+    for (let j = 0; j < neighbors.length; j += 1) {
+      const nx = x + neighbors[j][0];
+      const ny = y + neighbors[j][1];
+      if (!lookup.has(`${nx},${ny}`)) {
+        perimeterEdges += 1;
+      }
+    }
+  }
+
+  return perimeterEdges + cells.length;
 }
 
 function hasPlacement(currentBoard, cells) {
@@ -706,8 +820,23 @@ function loadBestScore() {
   return Number.isFinite(value) ? value : 0;
 }
 
+function loadGenerationClearsSetting() {
+  const stored = window.localStorage.getItem(GENERATOR_CLEARS_STORAGE_KEY);
+  if (stored === null) {
+    return true;
+  }
+  return stored === "1";
+}
+
 function saveBestScore(value) {
   window.localStorage.setItem(STORAGE_KEY, String(value));
+}
+
+function saveGenerationClearsSetting(isEnabled) {
+  window.localStorage.setItem(
+    GENERATOR_CLEARS_STORAGE_KEY,
+    isEnabled ? "1" : "0"
+  );
 }
 
 function nextPieceId() {

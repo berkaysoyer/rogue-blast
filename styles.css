@@ -81,6 +81,28 @@ p {
   font-size: 1.2rem;
 }
 
+.toggle-card {
+  background: var(--panel);
+  border: 1px solid #2f3d65;
+  border-radius: 12px;
+  min-width: 150px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.toggle-card input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #86a1ff;
+  cursor: pointer;
+}
+
 .btn {
   border: 1px solid #4d5d8f;
   background: #2b3a64;
