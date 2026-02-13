@@ -14,6 +14,8 @@ Simple web-based Block Blast style prototype:
 - Best score persisted in `localStorage`
 - Game over when no current piece can be placed
 - Toggle: generator simulation can include or ignore line clears between pick 1/2/3
+- Toggle: designated spot hover hint can be shown/hidden
+- Hovering a tray piece can show its original designated generation spot on board
 - Shape Bank modal:
   - View all available shapes
   - Toggle individual shapes on/off

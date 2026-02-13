@@ -4,6 +4,7 @@ const SHAPE_BANK_CELL_SIZE = 13;
 const STORAGE_KEY = "block-blast-mvp-best-score";
 const GENERATOR_CLEARS_STORAGE_KEY = "block-blast-mvp-generator-clears";
 const SHAPE_BANK_STORAGE_KEY = "block-blast-mvp-shape-bank-disabled";
+const DESIGNATED_SPOT_STORAGE_KEY = "block-blast-mvp-designated-spot";
 const SCORE_PER_LINE = 100;
 const MULTI_LINE_BONUS_PER_EXTRA = 50;
 const BATCH_SIZE = 3;
@@ -49,6 +50,7 @@ const trayEl = document.getElementById("tray");
 const scoreEl = document.getElementById("score");
 const bestScoreEl = document.getElementById("best-score");
 const plannerClearsToggleEl = document.getElementById("planner-clears-toggle");
+const designatedSpotToggleEl = document.getElementById("designated-spot-toggle");
 const shapeBankBtnEl = document.getElementById("shape-bank-btn");
 const shapeBankModalEl = document.getElementById("shape-bank-modal");
 const shapeBankCloseBtnEl = document.getElementById("shape-bank-close-btn");
@@ -64,12 +66,14 @@ let pieces = [];
 let score = 0;
 let bestScore = loadBestScore();
 let generationConfig = {
-  simulateLineClearsBetweenPicks: loadGenerationClearsSetting()
+  simulateLineClearsBetweenPicks: loadGenerationClearsSetting(),
+  showDesignatedSpotOnHover: loadDesignatedSpotSetting()
 };
 let disabledShapeIds = loadDisabledShapeIds();
 let pieceIdCounter = 0;
 let isGameOver = false;
 let dragState = null;
+let hoveredPieceId = null;
 
 init();
 
@@ -87,6 +91,15 @@ function bindControls() {
   plannerClearsToggleEl.addEventListener("change", () => {
     generationConfig.simulateLineClearsBetweenPicks = plannerClearsToggleEl.checked;
     saveGenerationClearsSetting(generationConfig.simulateLineClearsBetweenPicks);
+  });
+  designatedSpotToggleEl.checked = generationConfig.showDesignatedSpotOnHover;
+  designatedSpotToggleEl.addEventListener("change", () => {
+    generationConfig.showDesignatedSpotOnHover = designatedSpotToggleEl.checked;
+    saveDesignatedSpotSetting(generationConfig.showDesignatedSpotOnHover);
+    if (!generationConfig.showDesignatedSpotOnHover) {
+      hoveredPieceId = null;
+    }
+    renderBoard();
   });
 
   shapeBankBtnEl.addEventListener("click", openShapeBankModal);
@@ -120,6 +133,7 @@ function buildBoardUi() {
 
 function startNewGame() {
   stopDrag();
+  hoveredPieceId = null;
   board = createEmptyBoard();
   score = 0;
   isGameOver = false;
@@ -131,12 +145,14 @@ function startNewGame() {
 function endGame() {
   isGameOver = true;
   stopDrag();
+  hoveredPieceId = null;
   finalScoreTextEl.textContent = `Final Score: ${score}`;
   overlayEl.classList.remove("hidden");
   render();
 }
 
 function spawnNewBatch() {
+  hoveredPieceId = null;
   const next = generateBatch(board);
   pieces = next;
 
@@ -171,6 +187,10 @@ function renderBoard() {
     }
   }
 
+  if (!dragState && generationConfig.showDesignatedSpotOnHover) {
+    renderDesignatedSpotHint();
+  }
+
   if (!dragState) {
     return;
   }
@@ -200,6 +220,23 @@ function renderBoard() {
       cell.valid ? "preview-valid" : "preview-invalid"
     );
   });
+}
+
+function renderDesignatedSpotHint() {
+  const piece = getHoveredPiece();
+  if (!piece || !piece.designatedPlacement) {
+    return;
+  }
+
+  const { col, row } = piece.designatedPlacement;
+  for (let i = 0; i < piece.cells.length; i += 1) {
+    const x = col + piece.cells[i][0];
+    const y = row + piece.cells[i][1];
+    if (!isInsideBoard(x, y)) {
+      continue;
+    }
+    boardCells[toIndex(x, y)].classList.add("designated-hint");
+  }
 }
 
 function openShapeBankModal() {
@@ -260,6 +297,8 @@ function renderShapeBankPanel() {
 }
 
 function setShapeEnabled(shapeId, isEnabled) {
+  hoveredPieceId = null;
+
   if (isEnabled) {
     disabledShapeIds.delete(shapeId);
   } else {
@@ -315,6 +354,39 @@ function getShapeIdForCells(cells) {
   return SHAPE_ID_BY_KEY.get(shapeCellsKey(cells)) || "";
 }
 
+function getHoveredPiece() {
+  if (!hoveredPieceId) {
+    return null;
+  }
+
+  const piece = pieces.find((entry) => entry.id === hoveredPieceId);
+  if (!piece || piece.used) {
+    hoveredPieceId = null;
+    return null;
+  }
+
+  return piece;
+}
+
+function setHoveredPiece(pieceId) {
+  if (!generationConfig.showDesignatedSpotOnHover || dragState) {
+    return;
+  }
+  if (hoveredPieceId === pieceId) {
+    return;
+  }
+  hoveredPieceId = pieceId;
+  renderBoard();
+}
+
+function clearHoveredPiece(pieceId) {
+  if (!hoveredPieceId || hoveredPieceId !== pieceId) {
+    return;
+  }
+  hoveredPieceId = null;
+  renderBoard();
+}
+
 function renderTray() {
   trayEl.innerHTML = "";
 
@@ -330,6 +402,12 @@ function renderTray() {
     slot.appendChild(pieceEl);
 
     if (!piece.used && !isGameOver) {
+      slot.addEventListener("pointerenter", () => {
+        setHoveredPiece(piece.id);
+      });
+      slot.addEventListener("pointerleave", () => {
+        clearHoveredPiece(piece.id);
+      });
       slot.addEventListener("pointerdown", (event) => {
         beginDrag(event, piece);
       });
@@ -345,6 +423,7 @@ function beginDrag(event, piece) {
   }
 
   event.preventDefault();
+  hoveredPieceId = null;
 
   const { cellSize } = getBoardMetrics();
   const dragCellSize = Math.max(28, cellSize - 8);
@@ -526,11 +605,15 @@ function generateBatch(currentBoard) {
   for (let attempt = 0; attempt < 18; attempt += 1) {
     const candidate = generateBatchAttempt(currentBoard, enabledShapes);
     if (candidate.length === BATCH_SIZE) {
-      return candidate.map((shape) => ({
+      return candidate.map((entry) => ({
         id: nextPieceId(),
-        shapeId: shape.id,
+        shapeId: entry.shape.id,
         used: false,
-        cells: shape.cells
+        cells: entry.shape.cells,
+        designatedPlacement: {
+          col: entry.designatedPlacement.col,
+          row: entry.designatedPlacement.row
+        }
       }));
     }
     if (candidate.length > bestAttempt.length) {
@@ -546,15 +629,24 @@ function generateBatch(currentBoard) {
       bestAttempt.length < BATCH_SIZE &&
       placeableOnCurrentBoard.length > 0
     ) {
-      bestAttempt.push(pickShapeByScoreWeight(placeableOnCurrentBoard));
+      const shape = pickShapeByScoreWeight(placeableOnCurrentBoard);
+      const designatedPlacement = findDesignatedPlacement(currentBoard, shape.cells);
+      if (!designatedPlacement) {
+        break;
+      }
+      bestAttempt.push({ shape, designatedPlacement });
     }
   }
 
-  return bestAttempt.map((shape) => ({
+  return bestAttempt.map((entry) => ({
     id: nextPieceId(),
-    shapeId: shape.id,
+    shapeId: entry.shape.id,
     used: false,
-    cells: shape.cells
+    cells: entry.shape.cells,
+    designatedPlacement: {
+      col: entry.designatedPlacement.col,
+      row: entry.designatedPlacement.row
+    }
   }));
 }
 
@@ -579,7 +671,7 @@ function generateBatchAttempt(currentBoard, shapePool) {
       break;
     }
 
-    selected.push(chosenShape);
+    selected.push({ shape: chosenShape, designatedPlacement });
 
     planningBoard = applyGenerationPlacement(
       planningBoard,
@@ -982,6 +1074,14 @@ function loadGenerationClearsSetting() {
   return stored === "1";
 }
 
+function loadDesignatedSpotSetting() {
+  const stored = window.localStorage.getItem(DESIGNATED_SPOT_STORAGE_KEY);
+  if (stored === null) {
+    return true;
+  }
+  return stored === "1";
+}
+
 function loadDisabledShapeIds() {
   const raw = window.localStorage.getItem(SHAPE_BANK_STORAGE_KEY);
   if (!raw) {
@@ -1008,6 +1108,13 @@ function saveBestScore(value) {
 function saveGenerationClearsSetting(isEnabled) {
   window.localStorage.setItem(
     GENERATOR_CLEARS_STORAGE_KEY,
+    isEnabled ? "1" : "0"
+  );
+}
+
+function saveDesignatedSpotSetting(isEnabled) {
+  window.localStorage.setItem(
+    DESIGNATED_SPOT_STORAGE_KEY,
     isEnabled ? "1" : "0"
   );
 }
