@@ -28,6 +28,7 @@
             <span>Generator Clears</span>
             <input id="planner-clears-toggle" type="checkbox" />
           </label>
+          <button id="shape-bank-btn" class="btn">Shape Bank</button>
           <button id="restart-btn" class="btn">Restart</button>
         </div>
       </header>
@@ -46,6 +47,19 @@
         <div id="tray" class="tray" aria-label="Available pieces"></div>
       </section>
     </main>
+
+    <div id="shape-bank-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <section class="modal-panel">
+        <header class="modal-header">
+          <h2>Shape Bank</h2>
+          <button id="shape-bank-close-btn" class="btn">Close</button>
+        </header>
+        <p class="modal-subtitle">
+          Toggle shapes on/off. Disabled shapes will never be generated.
+        </p>
+        <div id="shape-bank-grid" class="shape-bank-grid"></div>
+      </section>
+    </div>
 
     <script src="./script.js"></script>
   </body>

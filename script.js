@@ -1,7 +1,9 @@
 const BOARD_SIZE = 8;
 const TRAY_CELL_SIZE = 22;
+const SHAPE_BANK_CELL_SIZE = 13;
 const STORAGE_KEY = "block-blast-mvp-best-score";
 const GENERATOR_CLEARS_STORAGE_KEY = "block-blast-mvp-generator-clears";
+const SHAPE_BANK_STORAGE_KEY = "block-blast-mvp-shape-bank-disabled";
 const SCORE_PER_LINE = 100;
 const MULTI_LINE_BONUS_PER_EXTRA = 50;
 const BATCH_SIZE = 3;
@@ -38,12 +40,19 @@ const SHAPES = [
   ...shape,
   score: calculateShapeScore(shape.cells)
 }));
+const SHAPE_ID_BY_KEY = new Map(
+  SHAPES.map((shape) => [shapeCellsKey(shape.cells), shape.id])
+);
 
 const boardEl = document.getElementById("board");
 const trayEl = document.getElementById("tray");
 const scoreEl = document.getElementById("score");
 const bestScoreEl = document.getElementById("best-score");
 const plannerClearsToggleEl = document.getElementById("planner-clears-toggle");
+const shapeBankBtnEl = document.getElementById("shape-bank-btn");
+const shapeBankModalEl = document.getElementById("shape-bank-modal");
+const shapeBankCloseBtnEl = document.getElementById("shape-bank-close-btn");
+const shapeBankGridEl = document.getElementById("shape-bank-grid");
 const restartBtn = document.getElementById("restart-btn");
 const overlayEl = document.getElementById("overlay");
 const finalScoreTextEl = document.getElementById("final-score-text");
@@ -57,6 +66,7 @@ let bestScore = loadBestScore();
 let generationConfig = {
   simulateLineClearsBetweenPicks: loadGenerationClearsSetting()
 };
+let disabledShapeIds = loadDisabledShapeIds();
 let pieceIdCounter = 0;
 let isGameOver = false;
 let dragState = null;
@@ -78,6 +88,22 @@ function bindControls() {
     generationConfig.simulateLineClearsBetweenPicks = plannerClearsToggleEl.checked;
     saveGenerationClearsSetting(generationConfig.simulateLineClearsBetweenPicks);
   });
+
+  shapeBankBtnEl.addEventListener("click", openShapeBankModal);
+  shapeBankCloseBtnEl.addEventListener("click", closeShapeBankModal);
+  shapeBankModalEl.addEventListener("click", (event) => {
+    if (event.target === shapeBankModalEl) {
+      closeShapeBankModal();
+    }
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !shapeBankModalEl.classList.contains("hidden")) {
+      closeShapeBankModal();
+    }
+  });
+
+  renderShapeBankPanel();
 }
 
 function buildBoardUi() {
@@ -133,6 +159,7 @@ function render() {
 function renderScore() {
   scoreEl.textContent = String(score);
   bestScoreEl.textContent = String(bestScore);
+  shapeBankBtnEl.textContent = `Shape Bank (${getEnabledShapes().length})`;
 }
 
 function renderBoard() {
@@ -173,6 +200,119 @@ function renderBoard() {
       cell.valid ? "preview-valid" : "preview-invalid"
     );
   });
+}
+
+function openShapeBankModal() {
+  renderShapeBankPanel();
+  shapeBankModalEl.classList.remove("hidden");
+}
+
+function closeShapeBankModal() {
+  shapeBankModalEl.classList.add("hidden");
+}
+
+function renderShapeBankPanel() {
+  shapeBankGridEl.innerHTML = "";
+
+  SHAPES.forEach((shape) => {
+    const card = document.createElement("div");
+    card.className = "shape-bank-item";
+
+    const enabled = isShapeEnabled(shape.id);
+    if (!enabled) {
+      card.classList.add("off");
+    }
+
+    const topRow = document.createElement("div");
+    topRow.className = "shape-bank-item-top";
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "shape-bank-item-name";
+    nameEl.textContent = shape.id;
+
+    const toggleEl = document.createElement("input");
+    toggleEl.className = "shape-bank-switch";
+    toggleEl.type = "checkbox";
+    toggleEl.checked = enabled;
+    toggleEl.setAttribute("aria-label", `Toggle ${shape.id}`);
+    toggleEl.addEventListener("change", () => {
+      setShapeEnabled(shape.id, toggleEl.checked);
+    });
+
+    topRow.appendChild(nameEl);
+    topRow.appendChild(toggleEl);
+
+    const previewWrap = document.createElement("div");
+    previewWrap.className = "shape-bank-preview-wrap";
+    previewWrap.appendChild(
+      createPieceElement(shape.cells, SHAPE_BANK_CELL_SIZE, "piece shape-bank-piece")
+    );
+
+    const scoreElLocal = document.createElement("div");
+    scoreElLocal.className = "shape-bank-item-score";
+    scoreElLocal.textContent = `Score: ${shape.score}`;
+
+    card.appendChild(topRow);
+    card.appendChild(previewWrap);
+    card.appendChild(scoreElLocal);
+    shapeBankGridEl.appendChild(card);
+  });
+}
+
+function setShapeEnabled(shapeId, isEnabled) {
+  if (isEnabled) {
+    disabledShapeIds.delete(shapeId);
+  } else {
+    disabledShapeIds.add(shapeId);
+  }
+
+  saveDisabledShapeIds(disabledShapeIds);
+  syncCurrentTrayWithShapeBank();
+  renderShapeBankPanel();
+  render();
+}
+
+function syncCurrentTrayWithShapeBank() {
+  if (pieces.length === 0) {
+    return;
+  }
+
+  const hasDisabledVisiblePiece = pieces.some(
+    (piece) => !piece.used && !isShapeEnabled(getPieceShapeId(piece))
+  );
+
+  if (!hasDisabledVisiblePiece) {
+    return;
+  }
+
+  pieces = generateBatch(board);
+  if (pieces.length === 0) {
+    endGame();
+    return;
+  }
+
+  if (!hasAnyMoves(board, pieces)) {
+    endGame();
+  }
+}
+
+function isShapeEnabled(shapeId) {
+  return !disabledShapeIds.has(shapeId);
+}
+
+function getEnabledShapes() {
+  return SHAPES.filter((shape) => isShapeEnabled(shape.id));
+}
+
+function getPieceShapeId(piece) {
+  if (piece.shapeId) {
+    return piece.shapeId;
+  }
+  return getShapeIdForCells(piece.cells);
+}
+
+function getShapeIdForCells(cells) {
+  return SHAPE_ID_BY_KEY.get(shapeCellsKey(cells)) || "";
 }
 
 function renderTray() {
@@ -376,13 +516,19 @@ function hasAnyMoves(currentBoard, activePieces) {
 }
 
 function generateBatch(currentBoard) {
+  const enabledShapes = getEnabledShapes();
+  if (enabledShapes.length === 0) {
+    return [];
+  }
+
   let bestAttempt = [];
 
   for (let attempt = 0; attempt < 18; attempt += 1) {
-    const candidate = generateBatchAttempt(currentBoard);
+    const candidate = generateBatchAttempt(currentBoard, enabledShapes);
     if (candidate.length === BATCH_SIZE) {
       return candidate.map((shape) => ({
         id: nextPieceId(),
+        shapeId: shape.id,
         used: false,
         cells: shape.cells
       }));
@@ -393,7 +539,7 @@ function generateBatch(currentBoard) {
   }
 
   if (bestAttempt.length > 0 && bestAttempt.length < BATCH_SIZE) {
-    const placeableOnCurrentBoard = SHAPES.filter((shape) =>
+    const placeableOnCurrentBoard = enabledShapes.filter((shape) =>
       hasPlacement(currentBoard, shape.cells)
     );
     while (
@@ -406,17 +552,18 @@ function generateBatch(currentBoard) {
 
   return bestAttempt.map((shape) => ({
     id: nextPieceId(),
+    shapeId: shape.id,
     used: false,
     cells: shape.cells
   }));
 }
 
-function generateBatchAttempt(currentBoard) {
+function generateBatchAttempt(currentBoard, shapePool) {
   const selected = [];
   let planningBoard = currentBoard.slice();
 
   for (let slot = 0; slot < BATCH_SIZE; slot += 1) {
-    const placeableShapes = SHAPES.filter((shape) =>
+    const placeableShapes = shapePool.filter((shape) =>
       hasPlacement(planningBoard, shape.cells)
     );
     if (placeableShapes.length === 0) {
@@ -643,6 +790,14 @@ function getShapeBounds(cells) {
   return { width: maxX + 1, height: maxY + 1 };
 }
 
+function shapeCellsKey(cells) {
+  return cells
+    .slice()
+    .sort((a, b) => a[1] - b[1] || a[0] - b[0])
+    .map(([x, y]) => `${x},${y}`)
+    .join("|");
+}
+
 function calculateShapeScore(cells) {
   let perimeterEdges = 0;
   const lookup = new Set(cells.map(([x, y]) => `${x},${y}`));
@@ -827,6 +982,25 @@ function loadGenerationClearsSetting() {
   return stored === "1";
 }
 
+function loadDisabledShapeIds() {
+  const raw = window.localStorage.getItem(SHAPE_BANK_STORAGE_KEY);
+  if (!raw) {
+    return new Set();
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
+
+    const validIds = new Set(SHAPES.map((shape) => shape.id));
+    return new Set(parsed.filter((id) => validIds.has(id)));
+  } catch (_) {
+    return new Set();
+  }
+}
+
 function saveBestScore(value) {
   window.localStorage.setItem(STORAGE_KEY, String(value));
 }
@@ -835,6 +1009,13 @@ function saveGenerationClearsSetting(isEnabled) {
   window.localStorage.setItem(
     GENERATOR_CLEARS_STORAGE_KEY,
     isEnabled ? "1" : "0"
+  );
+}
+
+function saveDisabledShapeIds(shapeIdSet) {
+  window.localStorage.setItem(
+    SHAPE_BANK_STORAGE_KEY,
+    JSON.stringify([...shapeIdSet])
   );
 }
 
