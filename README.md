@@ -9,6 +9,7 @@ Simple web-based Block Blast style prototype:
   - Shape weight = exposed perimeter edges + block count
   - Picks from currently placeable shape types
   - Adds low-occupancy size boost so bigger shapes are favored early game
+  - Adds extra near-empty-board boost for larger shapes (6+ cells)
   - Simulates designated placements near the busiest quadrant corner
 - Rows/columns clear simultaneously when full
 - Score from line clears with multi-line bonus

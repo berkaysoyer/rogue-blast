@@ -14,6 +14,9 @@ const DEFAULT_MIN_PERFECT_FIT_PERCENTAGE = 0.7;
 const DEFAULT_MIN_CELLS_FILLED_PERCENTAGE = 0.3;
 const LOW_OCCUPANCY_THRESHOLD = 0.28;
 const LOW_OCCUPANCY_MAX_BOOST = 2.3;
+const VERY_LOW_OCCUPANCY_THRESHOLD = 0.1;
+const LARGE_SHAPE_MIN_CELLS = 6;
+const VERY_LOW_OCCUPANCY_LARGE_SHAPE_BOOST = 2.2;
 
 const SHAPES = [
   { id: "domino_h", cells: [[0, 0], [1, 0]] },
@@ -1063,11 +1066,22 @@ function pickWeightedShapeWithBoardBoost(currentBoard, pool) {
     occupancyRatio >= LOW_OCCUPANCY_THRESHOLD
       ? 0
       : (LOW_OCCUPANCY_THRESHOLD - occupancyRatio) / LOW_OCCUPANCY_THRESHOLD;
+  const veryLowOccupancyFactor =
+    occupancyRatio >= VERY_LOW_OCCUPANCY_THRESHOLD
+      ? 0
+      : (VERY_LOW_OCCUPANCY_THRESHOLD - occupancyRatio) /
+        VERY_LOW_OCCUPANCY_THRESHOLD;
 
   const weights = pool.map((shape) => {
     const sizeWeight = shape.cells.length;
-    const boostMultiplier =
+    let boostMultiplier =
       1 + lowOccupancyFactor * (sizeWeight / 9) * LOW_OCCUPANCY_MAX_BOOST;
+
+    if (sizeWeight >= LARGE_SHAPE_MIN_CELLS && veryLowOccupancyFactor > 0) {
+      boostMultiplier *=
+        1 + veryLowOccupancyFactor * VERY_LOW_OCCUPANCY_LARGE_SHAPE_BOOST;
+    }
+
     return shape.score * boostMultiplier;
   });
 
