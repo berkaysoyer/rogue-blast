@@ -590,8 +590,8 @@ function renderTray() {
       slot.addEventListener("pointerleave", () => {
         clearHoveredPiece(piece.id);
       });
-      slot.addEventListener("pointerdown", (event) => {
-        beginDrag(event, piece);
+      pieceEl.addEventListener("pointerdown", (event) => {
+        beginDrag(event, piece, pieceEl);
       });
     }
 
@@ -599,7 +599,7 @@ function renderTray() {
   });
 }
 
-function beginDrag(event, piece) {
+function beginDrag(event, piece, sourcePieceEl) {
   if (isGameOver || piece.used || dragState) {
     return;
   }
@@ -610,10 +610,15 @@ function beginDrag(event, piece) {
   const { cellSize, step } = getBoardMetrics();
   const dragCellSize = cellSize;
   const bounds = getShapeBounds(piece.cells);
-  const anchor = {
-    x: Math.floor(bounds.width / 2),
-    y: Math.floor(bounds.height / 2)
-  };
+  const avatarWidth = (bounds.width - 1) * step + dragCellSize;
+  const avatarHeight = (bounds.height - 1) * step + dragCellSize;
+  const sourceRect = sourcePieceEl.getBoundingClientRect();
+  const sourceOffsetX = event.clientX - sourceRect.left;
+  const sourceOffsetY = event.clientY - sourceRect.top;
+  const scaleX = sourceRect.width > 0 ? avatarWidth / sourceRect.width : 1;
+  const scaleY = sourceRect.height > 0 ? avatarHeight / sourceRect.height : 1;
+  const grabOffsetX = Math.max(0, Math.min(avatarWidth, sourceOffsetX * scaleX));
+  const grabOffsetY = Math.max(0, Math.min(avatarHeight, sourceOffsetY * scaleY));
 
   const avatar = document.createElement("div");
   avatar.className = "drag-avatar";
@@ -624,8 +629,9 @@ function beginDrag(event, piece) {
     pointerId: event.pointerId,
     pieceId: piece.id,
     pieceCells: piece.cells,
-    anchor,
     avatar,
+    grabOffsetX,
+    grabOffsetY,
     col: -1,
     row: -1,
     valid: false,
@@ -683,27 +689,18 @@ function updateDragPosition(clientX, clientY) {
     return;
   }
 
-  dragState.avatar.style.transform = `translate(${clientX + 10}px, ${clientY + 10}px)`;
+  const avatarLeft = clientX - dragState.grabOffsetX;
+  const avatarTop = clientY - dragState.grabOffsetY;
+  dragState.avatar.style.transform = `translate(${avatarLeft}px, ${avatarTop}px)`;
 
   const boardRect = boardEl.getBoundingClientRect();
-  const { cellSize, gap, paddingLeft, paddingTop, borderLeft, borderTop, gridSize } =
+  const { cellSize, gap, paddingLeft, paddingTop, borderLeft, borderTop } =
     getBoardMetrics();
-  const localX = clientX - boardRect.left - borderLeft - paddingLeft;
-  const localY = clientY - boardRect.top - borderTop - paddingTop;
-  const pointerInGrid =
-    localX >= 0 && localX <= gridSize && localY >= 0 && localY <= gridSize;
-
-  if (!pointerInGrid) {
-    dragState.valid = false;
-    dragState.previewCells = [];
-    dragState.previewLines = { rows: [], cols: [] };
-    renderBoard();
-    return;
-  }
-
   const step = cellSize + gap;
-  const col = Math.floor(localX / step) - dragState.anchor.x;
-  const row = Math.floor(localY / step) - dragState.anchor.y;
+  const localLeft = avatarLeft - boardRect.left - borderLeft - paddingLeft;
+  const localTop = avatarTop - boardRect.top - borderTop - paddingTop;
+  const col = Math.round(localLeft / step);
+  const row = Math.round(localTop / step);
 
   dragState.col = col;
   dragState.row = row;
