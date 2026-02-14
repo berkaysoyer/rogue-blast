@@ -12,6 +12,8 @@ const BATCH_SIZE = 3;
 const DEFAULT_PERFECT_FIT_CHANCE = 0.5;
 const DEFAULT_MIN_PERFECT_FIT_PERCENTAGE = 0.7;
 const DEFAULT_MIN_CELLS_FILLED_PERCENTAGE = 0.3;
+const LOW_OCCUPANCY_THRESHOLD = 0.28;
+const LOW_OCCUPANCY_MAX_BOOST = 2.3;
 
 const SHAPES = [
   { id: "domino_h", cells: [[0, 0], [1, 0]] },
@@ -23,6 +25,9 @@ const SHAPES = [
   { id: "line5_h", cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] },
   { id: "line5_v", cells: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]] },
   { id: "square2", cells: [[0, 0], [1, 0], [0, 1], [1, 1]] },
+  { id: "rect2x3", cells: [[0, 0], [1, 0], [0, 1], [1, 1], [0, 2], [1, 2]] },
+  { id: "rect3x2", cells: [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]] },
+  { id: "square3", cells: [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]] },
   { id: "corner3_1", cells: [[0, 0], [1, 0], [0, 1]] },
   { id: "corner3_2", cells: [[0, 0], [1, 0], [1, 1]] },
   { id: "corner3_3", cells: [[0, 0], [0, 1], [1, 1]] },
@@ -862,7 +867,13 @@ function pickWeightedGenerationOption(currentBoard, placeableShapes) {
   if (placeableShapes.length === 0) {
     return null;
   }
-  const chosenShape = pickShapeByScoreWeight(placeableShapes);
+  const chosenShape = pickWeightedShapeWithBoardBoost(
+    currentBoard,
+    placeableShapes
+  );
+  if (!chosenShape) {
+    return null;
+  }
   const designatedPlacement = findDesignatedPlacement(currentBoard, chosenShape);
   if (!designatedPlacement) {
     return null;
@@ -1041,12 +1052,30 @@ function comparePerfectFitSelections(a, b) {
   return a.shape.id.localeCompare(b.shape.id);
 }
 
-function pickShapeByScoreWeight(pool) {
-  const totalScore = pool.reduce((sum, shape) => sum + shape.score, 0);
-  let roll = Math.random() * totalScore;
+function pickWeightedShapeWithBoardBoost(currentBoard, pool) {
+  if (pool.length === 0) {
+    return null;
+  }
+
+  const occupied = countOccupied(currentBoard);
+  const occupancyRatio = occupied / (BOARD_SIZE * BOARD_SIZE);
+  const lowOccupancyFactor =
+    occupancyRatio >= LOW_OCCUPANCY_THRESHOLD
+      ? 0
+      : (LOW_OCCUPANCY_THRESHOLD - occupancyRatio) / LOW_OCCUPANCY_THRESHOLD;
+
+  const weights = pool.map((shape) => {
+    const sizeWeight = shape.cells.length;
+    const boostMultiplier =
+      1 + lowOccupancyFactor * (sizeWeight / 9) * LOW_OCCUPANCY_MAX_BOOST;
+    return shape.score * boostMultiplier;
+  });
+
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+  let roll = Math.random() * totalWeight;
 
   for (let i = 0; i < pool.length; i += 1) {
-    roll -= pool[i].score;
+    roll -= weights[i];
     if (roll <= 0) {
       return pool[i];
     }

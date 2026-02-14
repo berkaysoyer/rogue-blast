@@ -8,6 +8,7 @@ Simple web-based Block Blast style prototype:
 - Invisible-hand style weighted generation:
   - Shape weight = exposed perimeter edges + block count
   - Picks from currently placeable shape types
+  - Adds low-occupancy size boost so bigger shapes are favored early game
   - Simulates designated placements near the busiest quadrant corner
 - Rows/columns clear simultaneously when full
 - Score from line clears with multi-line bonus
@@ -32,6 +33,7 @@ Simple web-based Block Blast style prototype:
   - Each generated piece is labeled `Perfect Fit (Simulated)` or `Weighted`
 - Shape Bank modal:
   - View all available shapes
+  - Includes larger blocks like `2x3`, `3x2`, and `3x3`
   - Toggle individual shapes on/off
   - Disabled shapes are never generated
 - Clearing rows/columns spawns gravity debris particles with quick random lifetime (`0.4s`-`1.0s`)
