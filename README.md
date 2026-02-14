@@ -23,8 +23,9 @@ Simple web-based Block Blast style prototype:
   - Per-piece chance to attempt perfect-fit placement (default `0.5`)
   - `minimumPerfectFitPercentage` default `0.7`
   - `minimumCellsFilledPercentage` default `0.3`
-  - `perfectFitPercentage = touchingEdges / totalEdges`
-  - `cellsFilledPercentage = touchingBlockEdges / totalEdges`
+  - Macro-side scoring (4 sides: top/right/bottom/left)
+  - `perfectFitPercentage = touchingSides / 4`
+  - `cellsFilledPercentage = touchingBlockSides / 4`
   - Falls back to weighted generation (based on original visible board) when no perfect-fit placement is found
   - Perfect-fit picks are simulated sequentially without simulating clears
   - Weighted picks are not simulated when determining perfect-fit picks

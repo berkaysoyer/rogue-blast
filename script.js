@@ -968,19 +968,19 @@ function findPerfectFitPlacements(currentBoard, shape, targetCorner) {
 }
 
 function calculatePerfectFitMetrics(currentBoard, shape, col, row) {
-  let touchingEdges = 0;
-  let touchingBlockEdges = 0;
+  const touchingSides = new Set();
+  const touchingBlockSides = new Set();
   const directions = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1]
+    { dx: 1, dy: 0, side: "right" },
+    { dx: -1, dy: 0, side: "left" },
+    { dx: 0, dy: 1, side: "bottom" },
+    { dx: 0, dy: -1, side: "top" }
   ];
 
   for (let i = 0; i < shape.cells.length; i += 1) {
     const [x, y] = shape.cells[i];
     for (let j = 0; j < directions.length; j += 1) {
-      const [dx, dy] = directions[j];
+      const { dx, dy, side } = directions[j];
       const neighborKey = `${x + dx},${y + dy}`;
       if (shape.localCellLookup.has(neighborKey)) {
         continue;
@@ -989,18 +989,21 @@ function calculatePerfectFitMetrics(currentBoard, shape, col, row) {
       const boardX = col + x + dx;
       const boardY = row + y + dy;
       if (!isInsideBoard(boardX, boardY)) {
-        touchingEdges += 1;
+        touchingSides.add(side);
         continue;
       }
 
       if (currentBoard[toIndex(boardX, boardY)] === 1) {
-        touchingEdges += 1;
-        touchingBlockEdges += 1;
+        touchingSides.add(side);
+        touchingBlockSides.add(side);
       }
     }
   }
 
-  const totalEdges = shape.perimeterEdges;
+  const totalEdges = 4;
+  const touchingEdges = touchingSides.size;
+  const touchingBlockEdges = touchingBlockSides.size;
+
   return {
     touchingEdges,
     touchingBlockEdges,
