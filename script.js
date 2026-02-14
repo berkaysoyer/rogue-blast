@@ -451,16 +451,16 @@ function renderTray() {
 
     const generationLabelEl = document.createElement("div");
     generationLabelEl.className = "piece-generation-label";
-    if (piece.generationType === "perfect_fit") {
+    if (piece.generationType === "perfect_fit_simulated") {
       generationLabelEl.classList.add("perfect");
-      generationLabelEl.textContent = "Perfect Fit";
+      generationLabelEl.textContent = "Perfect Fit (Simulated)";
     } else {
       generationLabelEl.classList.add("weighted");
       generationLabelEl.textContent = "Weighted";
     }
     slot.appendChild(generationLabelEl);
 
-    if (piece.generationType === "perfect_fit" && piece.perfectFitMetrics) {
+    if (piece.generationType === "perfect_fit_simulated" && piece.perfectFitMetrics) {
       const detailEl = document.createElement("div");
       detailEl.className = "piece-generation-detail";
       detailEl.textContent =
@@ -668,80 +668,63 @@ function generateBatch(currentBoard) {
     return [];
   }
 
-  let bestAttempt = [];
-
-  for (let attempt = 0; attempt < 18; attempt += 1) {
-    const candidate = generateBatchAttempt(currentBoard, enabledShapes);
-    if (candidate.length === BATCH_SIZE) {
-      return candidate.map((entry) => toGeneratedPiece(entry));
-    }
-    if (candidate.length > bestAttempt.length) {
-      bestAttempt = candidate;
-    }
-  }
-
-  if (bestAttempt.length > 0 && bestAttempt.length < BATCH_SIZE) {
-    let planningBoard = applyGenerationEntries(currentBoard, bestAttempt);
-    while (bestAttempt.length < BATCH_SIZE) {
-      const placeableShapes = enabledShapes.filter((shape) =>
-        hasPlacement(planningBoard, shape.cells)
-      );
-      if (placeableShapes.length === 0) {
-        break;
-      }
-
-      const weightedSelection = pickWeightedGenerationOption(
-        planningBoard,
-        placeableShapes
-      );
-      if (!weightedSelection) {
-        break;
-      }
-
-      bestAttempt.push(weightedSelection);
-      planningBoard = applyGenerationPlacement(
-        planningBoard,
-        weightedSelection.shape.cells,
-        weightedSelection.designatedPlacement.col,
-        weightedSelection.designatedPlacement.row
-      );
-    }
-  }
-
-  return bestAttempt.map((entry) => toGeneratedPiece(entry));
-}
-
-function generateBatchAttempt(currentBoard, shapePool) {
   const selected = [];
-  let planningBoard = currentBoard.slice();
+  let perfectPlanningBoard = currentBoard.slice();
 
   for (let slot = 0; slot < BATCH_SIZE; slot += 1) {
-    const placeableShapes = shapePool.filter((shape) =>
-      hasPlacement(planningBoard, shape.cells)
-    );
-    if (placeableShapes.length === 0) {
-      break;
+    let chosenSelection = null;
+    const shouldAttemptPerfectFit =
+      Math.random() < generationConfig.perfectFitChance;
+
+    if (shouldAttemptPerfectFit) {
+      const perfectPlaceableShapes = enabledShapes.filter((shape) =>
+        hasPlacement(perfectPlanningBoard, shape.cells)
+      );
+      chosenSelection = pickPerfectFitGenerationOption(
+        perfectPlanningBoard,
+        perfectPlaceableShapes
+      );
+      if (chosenSelection) {
+        selected.push(chosenSelection);
+        perfectPlanningBoard = applyPlacementWithoutClears(
+          perfectPlanningBoard,
+          chosenSelection.shape.cells,
+          chosenSelection.designatedPlacement.col,
+          chosenSelection.designatedPlacement.row
+        );
+        continue;
+      }
     }
 
-    const chosenSelection = pickGenerationOption(
-      planningBoard,
-      placeableShapes
+    const weightedPlaceableShapes = enabledShapes.filter((shape) =>
+      hasPlacement(currentBoard, shape.cells)
+    );
+    chosenSelection = pickWeightedGenerationOption(
+      currentBoard,
+      weightedPlaceableShapes
     );
     if (!chosenSelection) {
       break;
     }
-
     selected.push(chosenSelection);
-
-    planningBoard = applyGenerationPlacement(
-      planningBoard,
-      chosenSelection.shape.cells,
-      chosenSelection.designatedPlacement.col,
-      chosenSelection.designatedPlacement.row
-    );
   }
 
-  return selected;
+  while (selected.length < BATCH_SIZE) {
+    const weightedPlaceableShapes = enabledShapes.filter((shape) =>
+      hasPlacement(currentBoard, shape.cells)
+    );
+    const weightedSelection = pickWeightedGenerationOption(
+      currentBoard,
+      weightedPlaceableShapes
+    );
+    if (!weightedSelection) {
+      break;
+    }
+    selected.push(weightedSelection);
+  }
+
+  shuffleInPlace(selected);
+  return selected.slice(0, BATCH_SIZE).map((entry) => toGeneratedPiece(entry));
 }
 
 function toGeneratedPiece(entry) {
@@ -759,35 +742,10 @@ function toGeneratedPiece(entry) {
   };
 }
 
-function applyGenerationEntries(startBoard, entries) {
-  return entries.reduce((currentBoard, entry) => {
-    return applyGenerationPlacement(
-      currentBoard,
-      entry.shape.cells,
-      entry.designatedPlacement.col,
-      entry.designatedPlacement.row
-    );
-  }, startBoard.slice());
-}
-
-function pickGenerationOption(currentBoard, placeableShapes) {
-  const shouldTryPerfectFit =
-    Math.random() < generationConfig.perfectFitChance;
-
-  if (shouldTryPerfectFit) {
-    const perfectFitSelection = pickPerfectFitGenerationOption(
-      currentBoard,
-      placeableShapes
-    );
-    if (perfectFitSelection) {
-      return perfectFitSelection;
-    }
-  }
-
-  return pickWeightedGenerationOption(currentBoard, placeableShapes);
-}
-
 function pickWeightedGenerationOption(currentBoard, placeableShapes) {
+  if (placeableShapes.length === 0) {
+    return null;
+  }
   const chosenShape = pickShapeByScoreWeight(placeableShapes);
   const designatedPlacement = findDesignatedPlacement(currentBoard, chosenShape);
   if (!designatedPlacement) {
@@ -803,8 +761,12 @@ function pickWeightedGenerationOption(currentBoard, placeableShapes) {
 }
 
 function pickPerfectFitGenerationOption(currentBoard, placeableShapes) {
+  if (placeableShapes.length === 0) {
+    return null;
+  }
+
   const targetCorner = getBusiestQuadrantCorner(currentBoard);
-  const shapeOptions = [];
+  let bestSelection = null;
 
   for (let i = 0; i < placeableShapes.length; i += 1) {
     const shape = placeableShapes[i];
@@ -813,49 +775,37 @@ function pickPerfectFitGenerationOption(currentBoard, placeableShapes) {
       shape,
       targetCorner
     );
-    if (perfectPlacements.length > 0) {
-      shapeOptions.push({ shape, perfectPlacements });
+    for (let j = 0; j < perfectPlacements.length; j += 1) {
+      const candidate = {
+        shape,
+        ...perfectPlacements[j]
+      };
+      if (
+        !bestSelection ||
+        comparePerfectFitSelections(candidate, bestSelection) < 0
+      ) {
+        bestSelection = candidate;
+      }
     }
   }
 
-  if (shapeOptions.length === 0) {
-    return null;
-  }
-
-  const chosenShape = pickShapeByScoreWeight(
-    shapeOptions.map((option) => option.shape)
-  );
-  const chosenOption = shapeOptions.find(
-    (option) => option.shape.id === chosenShape.id
-  );
-  if (!chosenOption) {
-    return null;
-  }
-
-  const bestPlacement = chosenOption.perfectPlacements.reduce((best, current) => {
-    if (!best) {
-      return current;
-    }
-    return comparePerfectFitCandidates(current, best) < 0 ? current : best;
-  }, null);
-
-  if (!bestPlacement) {
+  if (!bestSelection) {
     return null;
   }
 
   return {
-    shape: chosenShape,
+    shape: bestSelection.shape,
     designatedPlacement: {
-      col: bestPlacement.col,
-      row: bestPlacement.row
+      col: bestSelection.col,
+      row: bestSelection.row
     },
-    generationType: "perfect_fit",
+    generationType: "perfect_fit_simulated",
     perfectFitMetrics: {
-      perfectFitPercentage: bestPlacement.perfectFitPercentage,
-      cellsFilledPercentage: bestPlacement.cellsFilledPercentage,
-      touchingEdges: bestPlacement.touchingEdges,
-      touchingBlockEdges: bestPlacement.touchingBlockEdges,
-      totalEdges: bestPlacement.totalEdges
+      perfectFitPercentage: bestSelection.perfectFitPercentage,
+      cellsFilledPercentage: bestSelection.cellsFilledPercentage,
+      touchingEdges: bestSelection.touchingEdges,
+      touchingBlockEdges: bestSelection.touchingBlockEdges,
+      totalEdges: bestSelection.totalEdges
     }
   };
 }
@@ -959,6 +909,17 @@ function comparePerfectFitCandidates(a, b) {
     return b.cellsFilledPercentage - a.cellsFilledPercentage;
   }
   return comparePlacementCandidates(a, b);
+}
+
+function comparePerfectFitSelections(a, b) {
+  const base = comparePerfectFitCandidates(a, b);
+  if (base !== 0) {
+    return base;
+  }
+  if (a.shape.score !== b.shape.score) {
+    return b.shape.score - a.shape.score;
+  }
+  return a.shape.id.localeCompare(b.shape.id);
 }
 
 function pickShapeByScoreWeight(pool) {
@@ -1097,17 +1058,20 @@ function countBlocksInQuadrant(currentBoard, minX, maxX, minY, maxY) {
   return count;
 }
 
-function applyGenerationPlacement(currentBoard, cells, col, row) {
-  if (generationConfig.simulateLineClearsBetweenPicks) {
-    return simulatePlacement(currentBoard, cells, col, row).nextBoard;
-  }
-
+function applyPlacementWithoutClears(currentBoard, cells, col, row) {
   const nextBoard = currentBoard.slice();
   for (let i = 0; i < cells.length; i += 1) {
     const [dx, dy] = cells[i];
     nextBoard[toIndex(col + dx, row + dy)] = 1;
   }
   return nextBoard;
+}
+
+function shuffleInPlace(list) {
+  for (let i = list.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
 }
 
 function createPieceElement(cells, cellSize, className) {

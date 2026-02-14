@@ -22,8 +22,10 @@ Simple web-based Block Blast style prototype:
   - `minimumCellsFilledPercentage` default `0.3`
   - `perfectFitPercentage = touchingEdges / totalEdges`
   - `cellsFilledPercentage = touchingBlockEdges / totalEdges`
-  - Falls back to weighted generation when no perfect-fit placement is found
-  - Each generated piece is labeled `Perfect Fit` or `Weighted`
+  - Falls back to weighted generation (based on original visible board) when no perfect-fit placement is found
+  - Perfect-fit picks are simulated sequentially without simulating clears
+  - Weighted picks are not simulated when determining perfect-fit picks
+  - Each generated piece is labeled `Perfect Fit (Simulated)` or `Weighted`
 - Shape Bank modal:
   - View all available shapes
   - Toggle individual shapes on/off
