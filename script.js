@@ -607,8 +607,8 @@ function beginDrag(event, piece) {
   event.preventDefault();
   hoveredPieceId = null;
 
-  const { cellSize } = getBoardMetrics();
-  const dragCellSize = Math.max(28, cellSize - 8);
+  const { cellSize, step } = getBoardMetrics();
+  const dragCellSize = cellSize;
   const bounds = getShapeBounds(piece.cells);
   const anchor = {
     x: Math.floor(bounds.width / 2),
@@ -617,7 +617,7 @@ function beginDrag(event, piece) {
 
   const avatar = document.createElement("div");
   avatar.className = "drag-avatar";
-  avatar.appendChild(createPieceElement(piece.cells, dragCellSize, "piece"));
+  avatar.appendChild(createPieceElement(piece.cells, dragCellSize, "piece", step));
   document.body.appendChild(avatar);
 
   dragState = {
@@ -651,6 +651,9 @@ function onPointerUp(event) {
   if (!dragState || event.pointerId !== dragState.pointerId) {
     return;
   }
+
+  // Snap once more at release point so drop matches shown shadow.
+  updateDragPosition(event.clientX, event.clientY);
 
   if (dragState.valid) {
     placeActivePiece();
@@ -1190,21 +1193,21 @@ function shuffleInPlace(list) {
   }
 }
 
-function createPieceElement(cells, cellSize, className) {
+function createPieceElement(cells, cellSize, className, cellStep = cellSize) {
   const pieceEl = document.createElement("div");
   pieceEl.className = className;
 
   const bounds = getShapeBounds(cells);
-  pieceEl.style.width = `${bounds.width * cellSize}px`;
-  pieceEl.style.height = `${bounds.height * cellSize}px`;
+  pieceEl.style.width = `${(bounds.width - 1) * cellStep + cellSize}px`;
+  pieceEl.style.height = `${(bounds.height - 1) * cellStep + cellSize}px`;
 
   cells.forEach(([x, y]) => {
     const square = document.createElement("div");
     square.className = "piece-cell";
     square.style.width = `${cellSize - 2}px`;
     square.style.height = `${cellSize - 2}px`;
-    square.style.left = `${x * cellSize}px`;
-    square.style.top = `${y * cellSize}px`;
+    square.style.left = `${x * cellStep}px`;
+    square.style.top = `${y * cellStep}px`;
     pieceEl.appendChild(square);
   });
 
