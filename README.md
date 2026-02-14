@@ -16,6 +16,9 @@ Simple web-based Block Blast style prototype:
 - Toggle: generator simulation can include or ignore line clears between pick 1/2/3
 - Toggle: designated spot hover hint can be shown/hidden
 - Hovering a tray piece can show its original designated generation spot on board
+- Dragging over a valid clearing move now:
+  - draws one rectangular outline over the full clear area
+  - flashes blocks that will be cleared (board blocks + dragged blocks on clearing lines)
 - Perfect Fit generation mode (configurable):
   - Per-piece chance to attempt perfect-fit placement (default `0.5`)
   - `minimumPerfectFitPercentage` default `0.7`
@@ -30,6 +33,7 @@ Simple web-based Block Blast style prototype:
   - View all available shapes
   - Toggle individual shapes on/off
   - Disabled shapes are never generated
+- Clearing rows/columns spawns gravity debris particles with quick random lifetime (`0.4s`-`1.0s`)
 
 ## Run
 

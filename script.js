@@ -55,6 +55,8 @@ const SHAPE_ID_BY_KEY = new Map(
 );
 
 const boardEl = document.getElementById("board");
+const clearOutlineEl = document.getElementById("clear-outline");
+const effectsLayerEl = document.getElementById("effects-layer");
 const trayEl = document.getElementById("tray");
 const scoreEl = document.getElementById("score");
 const bestScoreEl = document.getElementById("best-score");
@@ -170,6 +172,8 @@ function bindControls() {
 function buildBoardUi() {
   boardEl.innerHTML = "";
   boardCells = [];
+  hideClearOutline();
+  effectsLayerEl.innerHTML = "";
 
   for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i += 1) {
     const cell = document.createElement("div");
@@ -181,6 +185,8 @@ function buildBoardUi() {
 
 function startNewGame() {
   stopDrag();
+  effectsLayerEl.innerHTML = "";
+  hideClearOutline();
   hoveredPieceId = null;
   board = createEmptyBoard();
   score = 0;
@@ -227,6 +233,8 @@ function renderScore() {
 }
 
 function renderBoard() {
+  hideClearOutline();
+
   for (let i = 0; i < boardCells.length; i += 1) {
     const cell = boardCells[i];
     cell.className = "board-cell";
@@ -246,28 +254,134 @@ function renderBoard() {
   if (dragState.valid) {
     const rows = new Set(dragState.previewLines.rows);
     const cols = new Set(dragState.previewLines.cols);
+    const clearCells = getCellsForCompletedLines(rows, cols);
 
-    rows.forEach((row) => {
-      for (let x = 0; x < BOARD_SIZE; x += 1) {
-        boardCells[toIndex(x, row)].classList.add("clear-hint");
-      }
+    clearCells.forEach((cell) => {
+      boardCells[toIndex(cell.x, cell.y)].classList.add("clear-hint", "clear-flash");
     });
 
-    cols.forEach((col) => {
-      for (let y = 0; y < BOARD_SIZE; y += 1) {
-        boardCells[toIndex(col, y)].classList.add("clear-hint");
-      }
-    });
+    if (clearCells.length > 0) {
+      renderClearOutline(clearCells);
+    }
   }
 
   dragState.previewCells.forEach((cell) => {
     if (!isInsideBoard(cell.x, cell.y)) {
       return;
     }
-    boardCells[toIndex(cell.x, cell.y)].classList.add(
-      cell.valid ? "preview-valid" : "preview-invalid"
-    );
+    boardCells[toIndex(cell.x, cell.y)].classList.add("preview-valid");
   });
+}
+
+function getCellsForCompletedLines(rowsSet, colsSet) {
+  const seen = new Set();
+  const cells = [];
+
+  rowsSet.forEach((row) => {
+    for (let x = 0; x < BOARD_SIZE; x += 1) {
+      const key = `${x},${row}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      cells.push({ x, y: row });
+    }
+  });
+
+  colsSet.forEach((col) => {
+    for (let y = 0; y < BOARD_SIZE; y += 1) {
+      const key = `${col},${y}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      cells.push({ x: col, y });
+    }
+  });
+
+  return cells;
+}
+
+function renderClearOutline(clearCells) {
+  if (clearCells.length === 0) {
+    hideClearOutline();
+    return;
+  }
+
+  let minX = clearCells[0].x;
+  let maxX = clearCells[0].x;
+  let minY = clearCells[0].y;
+  let maxY = clearCells[0].y;
+
+  for (let i = 1; i < clearCells.length; i += 1) {
+    const cell = clearCells[i];
+    if (cell.x < minX) minX = cell.x;
+    if (cell.x > maxX) maxX = cell.x;
+    if (cell.y < minY) minY = cell.y;
+    if (cell.y > maxY) maxY = cell.y;
+  }
+
+  const metrics = getBoardMetrics();
+  const left = metrics.borderLeft + metrics.paddingLeft + minX * metrics.step;
+  const top = metrics.borderTop + metrics.paddingTop + minY * metrics.step;
+  const width = (maxX - minX + 1) * metrics.cellSize + (maxX - minX) * metrics.gap;
+  const height = (maxY - minY + 1) * metrics.cellSize + (maxY - minY) * metrics.gap;
+
+  clearOutlineEl.style.left = `${left - 2}px`;
+  clearOutlineEl.style.top = `${top - 2}px`;
+  clearOutlineEl.style.width = `${width + 4}px`;
+  clearOutlineEl.style.height = `${height + 4}px`;
+  clearOutlineEl.classList.remove("hidden");
+}
+
+function hideClearOutline() {
+  clearOutlineEl.classList.add("hidden");
+}
+
+function spawnClearDebris(clearedCells) {
+  if (!clearedCells || clearedCells.length === 0) {
+    return;
+  }
+
+  const metrics = getBoardMetrics();
+  const fragmentCountPerBlock = 4;
+
+  for (let i = 0; i < clearedCells.length; i += 1) {
+    const cell = clearedCells[i];
+    const cellLeft =
+      metrics.borderLeft + metrics.paddingLeft + cell.x * metrics.step;
+    const cellTop =
+      metrics.borderTop + metrics.paddingTop + cell.y * metrics.step;
+
+    for (let f = 0; f < fragmentCountPerBlock; f += 1) {
+      const particle = document.createElement("div");
+      const duration = randomRange(0.4, 1.0);
+      const startX = cellLeft + randomRange(3, Math.max(4, metrics.cellSize - 10));
+      const startY = cellTop + randomRange(3, Math.max(4, metrics.cellSize - 10));
+      const driftX = randomRange(-22, 22);
+      const dropY = randomRange(26, 96);
+
+      particle.className = "debris";
+      particle.style.left = `${startX}px`;
+      particle.style.top = `${startY}px`;
+      particle.style.setProperty("--drift-x", `${driftX}px`);
+      particle.style.setProperty("--drop-y", `${dropY}px`);
+      particle.style.setProperty("--debris-duration", `${duration.toFixed(3)}s`);
+      particle.style.setProperty(
+        "--spin-start",
+        `${Math.round(randomRange(-28, 28))}deg`
+      );
+      particle.style.setProperty(
+        "--spin-end",
+        `${Math.round(randomRange(110, 340))}deg`
+      );
+
+      effectsLayerEl.appendChild(particle);
+      window.setTimeout(() => {
+        particle.remove();
+      }, Math.ceil(duration * 1000) + 80);
+    }
+  }
 }
 
 function renderDesignatedSpotHint() {
@@ -569,9 +683,10 @@ function updateDragPosition(clientX, clientY) {
   dragState.avatar.style.transform = `translate(${clientX + 10}px, ${clientY + 10}px)`;
 
   const boardRect = boardEl.getBoundingClientRect();
-  const { cellSize, gap, paddingLeft, paddingTop, gridSize } = getBoardMetrics();
-  const localX = clientX - boardRect.left - paddingLeft;
-  const localY = clientY - boardRect.top - paddingTop;
+  const { cellSize, gap, paddingLeft, paddingTop, borderLeft, borderTop, gridSize } =
+    getBoardMetrics();
+  const localX = clientX - boardRect.left - borderLeft - paddingLeft;
+  const localY = clientY - boardRect.top - borderTop - paddingTop;
   const pointerInGrid =
     localX >= 0 && localX <= gridSize && localY >= 0 && localY <= gridSize;
 
@@ -597,9 +712,9 @@ function updateDragPosition(clientX, clientY) {
 
   const fits = canPlace(board, dragState.pieceCells, col, row);
   dragState.valid = fits;
-  dragState.previewCells = absoluteCells
-    .filter((cell) => isInsideBoard(cell.x, cell.y))
-    .map((cell) => ({ ...cell, valid: fits }));
+  dragState.previewCells = fits
+    ? absoluteCells.filter((cell) => isInsideBoard(cell.x, cell.y))
+    : [];
 
   if (fits) {
     const { completed } = simulatePlacement(board, dragState.pieceCells, col, row);
@@ -621,7 +736,7 @@ function placeActivePiece() {
     return;
   }
 
-  const { nextBoard, lineCount } = simulatePlacement(
+  const { nextBoard, lineCount, clearedCells } = simulatePlacement(
     board,
     piece.cells,
     dragState.col,
@@ -632,6 +747,7 @@ function placeActivePiece() {
   piece.used = true;
 
   if (lineCount > 0) {
+    spawnClearDebris(clearedCells);
     score += calculateLineScore(lineCount);
   }
 
@@ -1223,6 +1339,7 @@ function canPlace(currentBoard, cells, col, row) {
 
 function simulatePlacement(currentBoard, cells, col, row) {
   const nextBoard = currentBoard.slice();
+  const clearedCells = [];
 
   for (let i = 0; i < cells.length; i += 1) {
     const [dx, dy] = cells[i];
@@ -1235,10 +1352,20 @@ function simulatePlacement(currentBoard, cells, col, row) {
   const lineCount = completed.rows.length + completed.cols.length;
 
   if (lineCount > 0) {
+    const clearCellSet = getCellsForCompletedLines(
+      new Set(completed.rows),
+      new Set(completed.cols)
+    );
+    for (let i = 0; i < clearCellSet.length; i += 1) {
+      const cell = clearCellSet[i];
+      if (nextBoard[toIndex(cell.x, cell.y)] === 1) {
+        clearedCells.push(cell);
+      }
+    }
     clearLines(nextBoard, completed.rows, completed.cols);
   }
 
-  return { nextBoard, completed, lineCount };
+  return { nextBoard, completed, lineCount, clearedCells };
 }
 
 function getCompletedLines(currentBoard) {
@@ -1292,10 +1419,16 @@ function getBoardMetrics() {
   const style = window.getComputedStyle(boardEl);
   const cellSize = Number.parseFloat(style.getPropertyValue("--cell-size")) || 0;
   const gap = Number.parseFloat(style.getPropertyValue("--cell-gap")) || 0;
+  const borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
+  const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+  const step = cellSize + gap;
 
   return {
     cellSize,
     gap,
+    step,
+    borderLeft,
+    borderTop,
     paddingLeft: Number.parseFloat(style.paddingLeft) || 0,
     paddingTop: Number.parseFloat(style.paddingTop) || 0,
     gridSize: BOARD_SIZE * cellSize + (BOARD_SIZE - 1) * gap
@@ -1417,6 +1550,10 @@ function parseDecimalSetting(value, fallback) {
     return fallback;
   }
   return Math.min(1, Math.max(0, parsed));
+}
+
+function randomRange(min, max) {
+  return min + Math.random() * (max - min);
 }
 
 function formatDecimal(value) {

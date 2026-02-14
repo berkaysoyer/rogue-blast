@@ -159,6 +159,8 @@ p {
   border-radius: 16px;
   padding: 10px;
   touch-action: none;
+  position: relative;
+  z-index: 1;
 }
 
 .board-cell {
@@ -186,6 +188,20 @@ p {
 
 .board-cell.clear-hint {
   box-shadow: inset 0 0 0 2px rgba(255, 211, 100, 0.9);
+}
+
+.board-cell.clear-flash {
+  animation: clearFlash 220ms linear infinite alternate;
+}
+
+.board-cell.occupied.clear-flash {
+  background: #a6b2ff;
+  border-color: #d4dcff;
+}
+
+.board-cell.preview-valid.clear-flash {
+  background: rgba(138, 181, 255, 0.66);
+  border-color: #d4dcff;
 }
 
 .board-cell.designated-hint {
@@ -286,6 +302,71 @@ p {
 
 .overlay.hidden {
   display: none;
+}
+
+.clear-outline {
+  position: absolute;
+  border: 2px solid rgba(174, 194, 255, 0.95);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 6;
+  box-shadow: 0 0 0 1px rgba(132, 154, 228, 0.35);
+  animation: clearOutlinePulse 260ms ease-in-out infinite alternate;
+}
+
+.clear-outline.hidden {
+  display: none;
+}
+
+.effects-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.debris {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: linear-gradient(165deg, #c7d4ff 0%, #9aafff 56%, #7388dd 100%);
+  border-radius: 2px;
+  box-shadow: inset 0 -1px 0 rgba(67, 82, 145, 0.7);
+  opacity: 0.96;
+  transform: translate(0, 0) rotate(0deg);
+  animation: debrisFall var(--debris-duration) ease-in forwards;
+}
+
+@keyframes clearFlash {
+  from {
+    filter: brightness(0.98);
+    box-shadow: inset 0 0 0 2px rgba(198, 215, 255, 0.45);
+  }
+  to {
+    filter: brightness(1.16);
+    box-shadow: inset 0 0 0 2px rgba(223, 234, 255, 0.85);
+  }
+}
+
+@keyframes clearOutlinePulse {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes debrisFall {
+  0% {
+    transform: translate(0, 0) rotate(var(--spin-start, 0deg));
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(var(--drift-x), var(--drop-y)) rotate(var(--spin-end, 130deg));
+    opacity: 0;
+  }
 }
 
 .modal {
