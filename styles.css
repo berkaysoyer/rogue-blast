@@ -58,6 +58,8 @@ p {
   display: flex;
   align-items: stretch;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .score-card {
@@ -101,6 +103,29 @@ p {
   margin: 0;
   accent-color: #86a1ff;
   cursor: pointer;
+}
+
+.input-card {
+  background: var(--panel);
+  border: 1px solid #2f3d65;
+  border-radius: 12px;
+  min-width: 148px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.input-card input {
+  width: 100%;
+  border: 1px solid #435584;
+  border-radius: 8px;
+  background: #11192d;
+  color: var(--text);
+  padding: 4px 6px;
+  font-size: 0.85rem;
 }
 
 .btn {
@@ -189,12 +214,15 @@ p {
 
 .piece-slot {
   width: 180px;
-  min-height: 98px;
+  min-height: 116px;
   background: var(--panel);
   border: 1px solid #2f3e67;
   border-radius: 12px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 10px;
   transition: opacity 120ms ease;
   touch-action: none;
@@ -202,6 +230,25 @@ p {
 
 .piece-slot.used {
   opacity: 0.25;
+}
+
+.piece-generation-label {
+  font-size: 0.74rem;
+  color: var(--muted);
+  letter-spacing: 0.015em;
+}
+
+.piece-generation-label.perfect {
+  color: #b7c7f6;
+}
+
+.piece-generation-label.weighted {
+  color: #a6b3d8;
+}
+
+.piece-generation-detail {
+  font-size: 0.68rem;
+  color: #8f9fca;
 }
 
 .piece {

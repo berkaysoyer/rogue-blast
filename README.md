@@ -16,6 +16,14 @@ Simple web-based Block Blast style prototype:
 - Toggle: generator simulation can include or ignore line clears between pick 1/2/3
 - Toggle: designated spot hover hint can be shown/hidden
 - Hovering a tray piece can show its original designated generation spot on board
+- Perfect Fit generation mode (configurable):
+  - Per-piece chance to attempt perfect-fit placement (default `0.5`)
+  - `minimumPerfectFitPercentage` default `0.7`
+  - `minimumCellsFilledPercentage` default `0.3`
+  - `perfectFitPercentage = touchingEdges / totalEdges`
+  - `cellsFilledPercentage = touchingBlockEdges / totalEdges`
+  - Falls back to weighted generation when no perfect-fit placement is found
+  - Each generated piece is labeled `Perfect Fit` or `Weighted`
 - Shape Bank modal:
   - View all available shapes
   - Toggle individual shapes on/off
