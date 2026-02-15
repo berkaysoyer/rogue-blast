@@ -23,15 +23,21 @@ Simple web-based Block Blast style prototype:
   - flashes blocks that will be cleared (board blocks + dragged blocks on clearing lines)
 - Perfect Fit generation mode (configurable):
   - Per-piece chance to attempt perfect-fit placement (default `0.5`)
+  - Toggle for board source:
+    - ON (default): evaluate perfect fit from current board view
+    - OFF: evaluate perfect fit from simulated board view
   - `minimumPerfectFitPercentage` default `0.7`
   - `minimumCellsFilledPercentage` default `0.3`
-  - Macro-side scoring (4 sides: top/right/bottom/left)
-  - `perfectFitPercentage = touchingSides / 4`
-  - `cellsFilledPercentage = touchingBlockSides / 4`
+  - Per-edge-segment scoring
+  - `perfectFitPercentage = touchingEdges / totalEdges`
+  - `cellsFilledPercentage = touchingBlockEdges / totalEdges`
   - Falls back to weighted generation (based on original visible board) when no perfect-fit placement is found
-  - Perfect-fit picks are simulated sequentially without simulating clears
+  - In simulated mode, perfect-fit picks are simulated sequentially without simulating clears
   - Weighted picks are not simulated when determining perfect-fit picks
-  - Each generated piece is labeled `Perfect Fit (Simulated)` or `Weighted`
+  - Labels:
+    - `Perfect Fit` (current-board mode)
+    - `Perfect Fit (Simulated)` (simulated mode)
+    - `Weighted`
 - Shape Bank modal:
   - View all available shapes
   - Includes larger blocks like `2x3`, `3x2`, and `3x3`

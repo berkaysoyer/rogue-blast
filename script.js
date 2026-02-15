@@ -70,6 +70,9 @@ const scoreEl = document.getElementById("score");
 const bestScoreEl = document.getElementById("best-score");
 const plannerClearsToggleEl = document.getElementById("planner-clears-toggle");
 const designatedSpotToggleEl = document.getElementById("designated-spot-toggle");
+const perfectFitCurrentViewToggleEl = document.getElementById(
+  "perfect-fit-current-view-toggle"
+);
 const perfectFitChanceInputEl = document.getElementById("perfect-fit-chance-input");
 const minPerfectFitInputEl = document.getElementById("min-perfect-fit-input");
 const minCellsFilledInputEl = document.getElementById("min-cells-filled-input");
@@ -123,6 +126,13 @@ function bindControls() {
       hoveredPieceId = null;
     }
     renderBoard();
+  });
+  perfectFitCurrentViewToggleEl.checked =
+    generationConfig.perfectFitUseCurrentBoardView;
+  perfectFitCurrentViewToggleEl.addEventListener("change", () => {
+    generationConfig.perfectFitUseCurrentBoardView =
+      perfectFitCurrentViewToggleEl.checked;
+    savePerfectFitSettings(generationConfig);
   });
 
   perfectFitChanceInputEl.value = String(generationConfig.perfectFitChance);
@@ -573,7 +583,10 @@ function renderTray() {
 
     const generationLabelEl = document.createElement("div");
     generationLabelEl.className = "piece-generation-label";
-    if (piece.generationType === "perfect_fit_simulated") {
+    if (piece.generationType === "perfect_fit") {
+      generationLabelEl.classList.add("perfect");
+      generationLabelEl.textContent = "Perfect Fit";
+    } else if (piece.generationType === "perfect_fit_simulated") {
       generationLabelEl.classList.add("perfect");
       generationLabelEl.textContent = "Perfect Fit (Simulated)";
     } else {
@@ -582,7 +595,11 @@ function renderTray() {
     }
     slot.appendChild(generationLabelEl);
 
-    if (piece.generationType === "perfect_fit_simulated" && piece.perfectFitMetrics) {
+    if (
+      (piece.generationType === "perfect_fit" ||
+        piece.generationType === "perfect_fit_simulated") &&
+      piece.perfectFitMetrics
+    ) {
       const detailEl = document.createElement("div");
       detailEl.className = "piece-generation-detail";
       detailEl.textContent =
@@ -794,6 +811,7 @@ function generateBatch(currentBoard) {
 
   const selected = [];
   let perfectPlanningBoard = currentBoard.slice();
+  const useCurrentBoardPerfectFit = generationConfig.perfectFitUseCurrentBoardView;
 
   for (let slot = 0; slot < BATCH_SIZE; slot += 1) {
     let chosenSelection = null;
@@ -801,21 +819,26 @@ function generateBatch(currentBoard) {
       Math.random() < generationConfig.perfectFitChance;
 
     if (shouldAttemptPerfectFit) {
+      const perfectFitBoard = useCurrentBoardPerfectFit
+        ? currentBoard
+        : perfectPlanningBoard;
       const perfectPlaceableShapes = enabledShapes.filter((shape) =>
-        hasPlacement(perfectPlanningBoard, shape.cells)
+        hasPlacement(perfectFitBoard, shape.cells)
       );
       chosenSelection = pickPerfectFitGenerationOption(
-        perfectPlanningBoard,
+        perfectFitBoard,
         perfectPlaceableShapes
       );
       if (chosenSelection) {
         selected.push(chosenSelection);
-        perfectPlanningBoard = applyPlacementWithoutClears(
-          perfectPlanningBoard,
-          chosenSelection.shape.cells,
-          chosenSelection.designatedPlacement.col,
-          chosenSelection.designatedPlacement.row
-        );
+        if (!useCurrentBoardPerfectFit) {
+          perfectPlanningBoard = applyPlacementWithoutClears(
+            perfectPlanningBoard,
+            chosenSelection.shape.cells,
+            chosenSelection.designatedPlacement.col,
+            chosenSelection.designatedPlacement.row
+          );
+        }
         continue;
       }
     }
@@ -929,7 +952,9 @@ function pickPerfectFitGenerationOption(currentBoard, placeableShapes) {
       col: bestSelection.col,
       row: bestSelection.row
     },
-    generationType: "perfect_fit_simulated",
+    generationType: generationConfig.perfectFitUseCurrentBoardView
+      ? "perfect_fit"
+      : "perfect_fit_simulated",
     perfectFitMetrics: {
       perfectFitPercentage: bestSelection.perfectFitPercentage,
       cellsFilledPercentage: bestSelection.cellsFilledPercentage,
@@ -982,19 +1007,19 @@ function findPerfectFitPlacements(currentBoard, shape, targetCorner) {
 }
 
 function calculatePerfectFitMetrics(currentBoard, shape, col, row) {
-  const touchingSides = new Set();
-  const touchingBlockSides = new Set();
+  let touchingEdges = 0;
+  let touchingBlockEdges = 0;
   const directions = [
-    { dx: 1, dy: 0, side: "right" },
-    { dx: -1, dy: 0, side: "left" },
-    { dx: 0, dy: 1, side: "bottom" },
-    { dx: 0, dy: -1, side: "top" }
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1]
   ];
 
   for (let i = 0; i < shape.cells.length; i += 1) {
     const [x, y] = shape.cells[i];
     for (let j = 0; j < directions.length; j += 1) {
-      const { dx, dy, side } = directions[j];
+      const [dx, dy] = directions[j];
       const neighborKey = `${x + dx},${y + dy}`;
       if (shape.localCellLookup.has(neighborKey)) {
         continue;
@@ -1003,20 +1028,18 @@ function calculatePerfectFitMetrics(currentBoard, shape, col, row) {
       const boardX = col + x + dx;
       const boardY = row + y + dy;
       if (!isInsideBoard(boardX, boardY)) {
-        touchingSides.add(side);
+        touchingEdges += 1;
         continue;
       }
 
       if (currentBoard[toIndex(boardX, boardY)] === 1) {
-        touchingSides.add(side);
-        touchingBlockSides.add(side);
+        touchingEdges += 1;
+        touchingBlockEdges += 1;
       }
     }
   }
 
-  const totalEdges = 4;
-  const touchingEdges = touchingSides.size;
-  const touchingBlockEdges = touchingBlockSides.size;
+  const totalEdges = shape.perimeterEdges;
 
   return {
     touchingEdges,
@@ -1506,7 +1529,8 @@ function loadPerfectFitSettings() {
   const defaults = {
     perfectFitChance: DEFAULT_PERFECT_FIT_CHANCE,
     minimumPerfectFitPercentage: DEFAULT_MIN_PERFECT_FIT_PERCENTAGE,
-    minimumCellsFilledPercentage: DEFAULT_MIN_CELLS_FILLED_PERCENTAGE
+    minimumCellsFilledPercentage: DEFAULT_MIN_CELLS_FILLED_PERCENTAGE,
+    perfectFitUseCurrentBoardView: true
   };
 
   const raw = window.localStorage.getItem(PERFECT_FIT_SETTINGS_STORAGE_KEY);
@@ -1528,6 +1552,10 @@ function loadPerfectFitSettings() {
       minimumCellsFilledPercentage: parseDecimalSetting(
         parsed?.minimumCellsFilledPercentage,
         defaults.minimumCellsFilledPercentage
+      ),
+      perfectFitUseCurrentBoardView: parseBooleanSetting(
+        parsed?.perfectFitUseCurrentBoardView,
+        defaults.perfectFitUseCurrentBoardView
       )
     };
   } catch (_) {
@@ -1578,7 +1606,8 @@ function savePerfectFitSettings(config) {
     JSON.stringify({
       perfectFitChance: config.perfectFitChance,
       minimumPerfectFitPercentage: config.minimumPerfectFitPercentage,
-      minimumCellsFilledPercentage: config.minimumCellsFilledPercentage
+      minimumCellsFilledPercentage: config.minimumCellsFilledPercentage,
+      perfectFitUseCurrentBoardView: config.perfectFitUseCurrentBoardView
     })
   );
 }
@@ -1596,6 +1625,19 @@ function parseDecimalSetting(value, fallback) {
     return fallback;
   }
   return Math.min(1, Math.max(0, parsed));
+}
+
+function parseBooleanSetting(value, fallback) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  return fallback;
 }
 
 function randomRange(min, max) {
