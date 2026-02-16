@@ -218,33 +218,41 @@ p {
 .board-cell.token-block {
   position: relative;
   overflow: hidden;
+  background: radial-gradient(circle at 28% 24%, #c7f4ff 0%, #6ed7ff 34%, #5b8fff 73%, #5870db 100%);
+  border-color: #b5dcff;
+  box-shadow:
+    inset 0 -2px 0 rgba(59, 87, 171, 0.7),
+    0 0 10px rgba(118, 198, 255, 0.72);
+  animation: tokenPulse 680ms ease-in-out infinite alternate;
 }
 
 .board-cell.token-block::before {
   content: "";
   position: absolute;
-  width: 15px;
-  height: 15px;
-  right: 5px;
-  top: 5px;
+  width: 20px;
+  height: 20px;
+  right: 50%;
+  top: 50%;
+  margin-right: -10px;
+  margin-top: -10px;
   transform: rotate(45deg);
-  background: linear-gradient(145deg, #d8f9ff 0%, #8ecbff 42%, #6ea2ff 100%);
-  border-radius: 3px;
+  background: linear-gradient(145deg, #ffffff 0%, #b6efff 42%, #7bb7ff 100%);
+  border-radius: 4px;
   box-shadow:
-    0 0 8px rgba(126, 202, 255, 0.7),
+    0 0 10px rgba(198, 237, 255, 0.95),
     inset 0 -1px 0 rgba(53, 91, 166, 0.72);
 }
 
 .board-cell.token-block::after {
-  content: "";
+  content: "✦";
   position: absolute;
-  width: 6px;
-  height: 6px;
-  right: 9px;
-  top: 9px;
-  border-radius: 50%;
-  background: rgba(245, 255, 255, 0.96);
-  box-shadow: 0 0 5px rgba(220, 246, 255, 0.95);
+  right: 50%;
+  top: 50%;
+  margin-right: -5px;
+  margin-top: -8px;
+  font-size: 0.72rem;
+  color: #eaffff;
+  text-shadow: 0 0 6px rgba(225, 250, 255, 0.9);
 }
 
 .tray-section {
@@ -349,6 +357,25 @@ p {
   border-radius: 6px;
 }
 
+.piece-cell.token-cell {
+  background: radial-gradient(circle at 25% 20%, #d6fcff 0%, #7adfff 37%, #6998ff 74%, #576ed4 100%);
+  border-color: #d8ecff;
+  box-shadow:
+    inset 0 -2px 0 rgba(74, 97, 173, 0.84),
+    0 0 8px rgba(138, 211, 255, 0.72);
+}
+
+.piece-cell.token-cell::after {
+  content: "✦";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  color: #f4ffff;
+  text-shadow: 0 0 5px rgba(230, 255, 255, 0.85);
+}
+
 .drag-avatar {
   position: fixed;
   top: 0;
@@ -436,6 +463,15 @@ p {
   100% {
     transform: translate(var(--drift-x), var(--drop-y)) rotate(var(--spin-end, 130deg));
     opacity: 0;
+  }
+}
+
+@keyframes tokenPulse {
+  from {
+    filter: brightness(0.97);
+  }
+  to {
+    filter: brightness(1.14);
   }
 }
 

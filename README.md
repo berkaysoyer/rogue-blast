@@ -19,7 +19,7 @@ Simple web-based Block Blast style prototype:
 - Toggle: designated spot hover hint can be shown/hidden
 - Hovering a tray piece can show its original designated generation spot on board
 - Roguelite prototype layer:
-  - Token gem can appear on newly placed surviving blocks when a new bank is generated (10% chance, 1 token per bank roll)
+  - Token gem can appear inside a random block of the new shape bank when generated (10% chance, max 1 token per bank roll)
   - Clearing a block with token collects it
   - Progress bar above pieces tracks milestone progress (3, 5, 7, 9, ...)
   - Milestone opens perk-pick overlay (3 options + free reshuffle RV button)

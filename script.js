@@ -125,7 +125,6 @@ let isGameOver = false;
 let dragState = null;
 let hoveredPieceId = null;
 let tokenBlockIndices = new Set();
-let bankPlacedBlockIndices = new Set();
 let totalTokensCollected = 0;
 let previousMilestoneTarget = 0;
 let nextMilestoneTarget = INITIAL_MILESTONE_TARGET;
@@ -243,7 +242,6 @@ function startNewGame() {
   hoveredPieceId = null;
   closePerkOverlay();
   tokenBlockIndices = new Set();
-  bankPlacedBlockIndices = new Set();
   totalTokensCollected = 0;
   previousMilestoneTarget = 0;
   nextMilestoneTarget = INITIAL_MILESTONE_TARGET;
@@ -273,12 +271,13 @@ function spawnNewBatch() {
   hoveredPieceId = null;
   const next = generateBatch(board);
   pieces = next;
-  maybeSpawnTokenBlockForNewBank();
 
   if (pieces.length === 0) {
     endGame();
     return;
   }
+
+  maybeAssignTokenToShapeBank();
 
   if (!hasAnyMoves(board, pieces)) {
     endGame();
@@ -574,10 +573,14 @@ function syncCurrentTrayWithShapeBank() {
     endGame();
     return;
   }
+  maybeAssignTokenToShapeBank();
 
   if (!hasAnyMoves(board, pieces)) {
     endGame();
+    return;
   }
+
+  maybeOpenPerkOverlayIfNeeded();
 }
 
 function isShapeEnabled(shapeId) {
@@ -643,7 +646,13 @@ function renderTray() {
       slot.classList.add("used");
     }
 
-    const pieceEl = createPieceElement(piece.cells, TRAY_CELL_SIZE, "piece");
+    const pieceEl = createPieceElement(
+      piece.cells,
+      TRAY_CELL_SIZE,
+      "piece",
+      TRAY_CELL_SIZE,
+      piece.tokenCell || null
+    );
     slot.appendChild(pieceEl);
 
     const generationLabelEl = document.createElement("div");
@@ -712,7 +721,9 @@ function beginDrag(event, piece, sourcePieceEl) {
 
   const avatar = document.createElement("div");
   avatar.className = "drag-avatar";
-  avatar.appendChild(createPieceElement(piece.cells, dragCellSize, "piece", step));
+  avatar.appendChild(
+    createPieceElement(piece.cells, dragCellSize, "piece", step, piece.tokenCell || null)
+  );
   document.body.appendChild(avatar);
 
   dragState = {
@@ -826,10 +837,6 @@ function placeActivePiece() {
     return;
   }
 
-  const placedIndices = piece.cells.map(([dx, dy]) =>
-    toIndex(dragState.col + dx, dragState.row + dy)
-  );
-
   const { nextBoard, lineCount, clearedCells } = simulatePlacement(
     board,
     piece.cells,
@@ -839,7 +846,15 @@ function placeActivePiece() {
 
   board = nextBoard;
   piece.used = true;
-  updatePlacedBlockTracking(placedIndices, clearedCells);
+
+  if (piece.tokenCell) {
+    const tokenBoardIndex = toIndex(
+      dragState.col + piece.tokenCell[0],
+      dragState.row + piece.tokenCell[1]
+    );
+    tokenBlockIndices.add(tokenBoardIndex);
+  }
+
   const collectedTokens = collectTokensFromClearedCells(clearedCells);
 
   if (lineCount > 0) {
@@ -881,31 +896,22 @@ function hasAnyMoves(currentBoard, activePieces) {
   return activePieces.some((piece) => !piece.used && hasPlacement(currentBoard, piece.cells));
 }
 
-function updatePlacedBlockTracking(placedIndices, clearedCells) {
-  for (let i = 0; i < placedIndices.length; i += 1) {
-    const index = placedIndices[i];
-    if (board[index] === 1) {
-      bankPlacedBlockIndices.add(index);
-    }
+function maybeAssignTokenToShapeBank() {
+  for (let i = 0; i < pieces.length; i += 1) {
+    pieces[i].tokenCell = null;
   }
 
-  for (let i = 0; i < clearedCells.length; i += 1) {
-    const index = toIndex(clearedCells[i].x, clearedCells[i].y);
-    bankPlacedBlockIndices.delete(index);
-  }
-}
-
-function maybeSpawnTokenBlockForNewBank() {
-  const eligible = [...bankPlacedBlockIndices].filter(
-    (index) => board[index] === 1 && !tokenBlockIndices.has(index)
-  );
-
-  if (eligible.length > 0 && Math.random() < TOKEN_SPAWN_CHANCE_PER_BANK) {
-    const picked = eligible[Math.floor(Math.random() * eligible.length)];
-    tokenBlockIndices.add(picked);
+  if (Math.random() >= TOKEN_SPAWN_CHANCE_PER_BANK) {
+    return;
   }
 
-  bankPlacedBlockIndices.clear();
+  const piece = pieces[Math.floor(Math.random() * pieces.length)];
+  if (!piece || piece.cells.length === 0) {
+    return;
+  }
+
+  const tokenCell = piece.cells[Math.floor(Math.random() * piece.cells.length)];
+  piece.tokenCell = [tokenCell[0], tokenCell[1]];
 }
 
 function collectTokensFromClearedCells(clearedCells) {
@@ -1104,6 +1110,7 @@ function toGeneratedPiece(entry) {
     shapeId: entry.shape.id,
     used: false,
     cells: entry.shape.cells,
+    tokenCell: null,
     designatedPlacement: {
       col: entry.designatedPlacement.col,
       row: entry.designatedPlacement.row
@@ -1483,7 +1490,13 @@ function shuffleInPlace(list) {
   }
 }
 
-function createPieceElement(cells, cellSize, className, cellStep = cellSize) {
+function createPieceElement(
+  cells,
+  cellSize,
+  className,
+  cellStep = cellSize,
+  tokenCell = null
+) {
   const pieceEl = document.createElement("div");
   pieceEl.className = className;
 
@@ -1494,6 +1507,9 @@ function createPieceElement(cells, cellSize, className, cellStep = cellSize) {
   cells.forEach(([x, y]) => {
     const square = document.createElement("div");
     square.className = "piece-cell";
+    if (tokenCell && tokenCell[0] === x && tokenCell[1] === y) {
+      square.classList.add("token-cell");
+    }
     square.style.width = `${cellSize - 2}px`;
     square.style.height = `${cellSize - 2}px`;
     square.style.left = `${x * cellStep}px`;
