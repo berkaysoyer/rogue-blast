@@ -65,6 +65,16 @@
       </section>
 
       <section class="tray-section">
+        <div class="token-track">
+          <div class="token-track-head">
+            <span>Rogue Progress</span>
+            <strong id="token-progress-text">0 / 3</strong>
+          </div>
+          <div class="token-track-bar">
+            <div id="token-progress-fill" class="token-track-fill"></div>
+          </div>
+        </div>
+
         <h2>Pieces</h2>
         <div id="tray" class="tray" aria-label="Available pieces"></div>
       </section>
@@ -80,6 +90,22 @@
           Toggle shapes on/off. Disabled shapes will never be generated.
         </p>
         <div id="shape-bank-grid" class="shape-bank-grid"></div>
+      </section>
+    </div>
+
+    <div id="perk-overlay" class="perk-overlay hidden" role="dialog" aria-modal="true">
+      <section class="perk-panel">
+        <header class="perk-panel-head">
+          <h2>Milestone Reached</h2>
+          <p>Pick one perk to continue</p>
+        </header>
+        <div id="perk-options" class="perk-options"></div>
+        <div class="perk-actions">
+          <button id="perk-reshuffle-btn" class="btn perk-reshuffle-btn">
+            <span class="play-icon">▶</span>
+            Reshuffle RV
+          </button>
+        </div>
       </section>
     </div>
 

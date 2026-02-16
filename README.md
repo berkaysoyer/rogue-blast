@@ -18,6 +18,13 @@ Simple web-based Block Blast style prototype:
 - Toggle: generator simulation can include or ignore line clears between pick 1/2/3
 - Toggle: designated spot hover hint can be shown/hidden
 - Hovering a tray piece can show its original designated generation spot on board
+- Roguelite prototype layer:
+  - Token gem can appear on newly placed surviving blocks when a new bank is generated (10% chance, 1 token per bank roll)
+  - Clearing a block with token collects it
+  - Progress bar above pieces tracks milestone progress (3, 5, 7, 9, ...)
+  - Milestone opens perk-pick overlay (3 options + free reshuffle RV button)
+  - Picked perks are removed from future offerings
+  - Dummy perk effects for now (names/icons/stars only)
 - Dragging over a valid clearing move now:
   - draws one rectangular outline over the full clear area
   - flashes blocks that will be cleared (board blocks + dragged blocks on clearing lines)

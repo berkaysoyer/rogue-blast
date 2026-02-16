@@ -17,6 +17,9 @@ const LOW_OCCUPANCY_MAX_BOOST = 2.3;
 const VERY_LOW_OCCUPANCY_THRESHOLD = 0.1;
 const LARGE_SHAPE_MIN_CELLS = 6;
 const VERY_LOW_OCCUPANCY_LARGE_SHAPE_BOOST = 2.2;
+const TOKEN_SPAWN_CHANCE_PER_BANK = 0.1;
+const INITIAL_MILESTONE_TARGET = 3;
+const MILESTONE_STEP = 2;
 
 const SHAPES = [
   { id: "domino_h", cells: [[0, 0], [1, 0]] },
@@ -62,10 +65,28 @@ const SHAPE_ID_BY_KEY = new Map(
   SHAPES.map((shape) => [shapeCellsKey(shape.cells), shape.id])
 );
 
+const PERK_DEFINITIONS = [
+  { id: "pf_plus_5", name: "Perfect Fit +5%", desc: "+5% chance", icon: "💎", stars: 0 },
+  { id: "pf_plus_10", name: "Perfect Fit +10%", desc: "+10% chance", icon: "✨", stars: 3 },
+  { id: "flip_plus_1", name: "Flip +1", desc: "Flip it!", icon: "↔️", stars: 0 },
+  { id: "flip_plus_2", name: "Flip +2", desc: "Flip it more!", icon: "🔁", stars: 0 },
+  { id: "perfect_combo", name: "Perfect Combo", desc: "10 combo grants perfect fit", icon: "🎯", stars: 3 },
+  { id: "tnt_combo", name: "TNT Combo", desc: "15 combo grants TNT", icon: "💥", stars: 3 },
+  { id: "area_row", name: "Area +1 Row", desc: "Board area increase", icon: "⬇️", stars: 0 },
+  { id: "area_col", name: "Area +1 Col", desc: "Board area increase", icon: "➡️", stars: 0 },
+  { id: "daily_reshuffle", name: "Daily Reshuffle", desc: "1 free reshuffle daily", icon: "🎲", stars: 0 },
+  { id: "gems_plus_5", name: "Gems +5%", desc: "Higher gem chance", icon: "💠", stars: 0 },
+  { id: "gems_plus_10", name: "Gems +10%", desc: "Bigger gem chance", icon: "💍", stars: 0 },
+  { id: "perfect_helper", name: "Perfect Fit Helper", desc: "Shows perfect spot", icon: "🧭", stars: 0 },
+  { id: "undo_plus_1", name: "Undo +1", desc: "Gain one undo", icon: "⏪", stars: 3 }
+];
+
 const boardEl = document.getElementById("board");
 const clearOutlineEl = document.getElementById("clear-outline");
 const effectsLayerEl = document.getElementById("effects-layer");
 const trayEl = document.getElementById("tray");
+const tokenProgressTextEl = document.getElementById("token-progress-text");
+const tokenProgressFillEl = document.getElementById("token-progress-fill");
 const scoreEl = document.getElementById("score");
 const bestScoreEl = document.getElementById("best-score");
 const plannerClearsToggleEl = document.getElementById("planner-clears-toggle");
@@ -80,6 +101,9 @@ const shapeBankBtnEl = document.getElementById("shape-bank-btn");
 const shapeBankModalEl = document.getElementById("shape-bank-modal");
 const shapeBankCloseBtnEl = document.getElementById("shape-bank-close-btn");
 const shapeBankGridEl = document.getElementById("shape-bank-grid");
+const perkOverlayEl = document.getElementById("perk-overlay");
+const perkOptionsEl = document.getElementById("perk-options");
+const perkReshuffleBtnEl = document.getElementById("perk-reshuffle-btn");
 const restartBtn = document.getElementById("restart-btn");
 const overlayEl = document.getElementById("overlay");
 const finalScoreTextEl = document.getElementById("final-score-text");
@@ -100,6 +124,16 @@ let pieceIdCounter = 0;
 let isGameOver = false;
 let dragState = null;
 let hoveredPieceId = null;
+let tokenBlockIndices = new Set();
+let bankPlacedBlockIndices = new Set();
+let totalTokensCollected = 0;
+let previousMilestoneTarget = 0;
+let nextMilestoneTarget = INITIAL_MILESTONE_TARGET;
+let pendingPerkSelections = 0;
+let isPerkOverlayOpen = false;
+let availablePerks = buildInitialPerkPool();
+let selectedPerks = [];
+let currentPerkChoices = [];
 
 init();
 
@@ -177,6 +211,7 @@ function bindControls() {
       closeShapeBankModal();
     }
   });
+  perkReshuffleBtnEl.addEventListener("click", reshufflePerkChoices);
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !shapeBankModalEl.classList.contains("hidden")) {
@@ -206,6 +241,16 @@ function startNewGame() {
   effectsLayerEl.innerHTML = "";
   hideClearOutline();
   hoveredPieceId = null;
+  closePerkOverlay();
+  tokenBlockIndices = new Set();
+  bankPlacedBlockIndices = new Set();
+  totalTokensCollected = 0;
+  previousMilestoneTarget = 0;
+  nextMilestoneTarget = INITIAL_MILESTONE_TARGET;
+  pendingPerkSelections = 0;
+  availablePerks = buildInitialPerkPool();
+  selectedPerks = [];
+  currentPerkChoices = [];
   board = createEmptyBoard();
   score = 0;
   isGameOver = false;
@@ -217,6 +262,7 @@ function startNewGame() {
 function endGame() {
   isGameOver = true;
   stopDrag();
+  closePerkOverlay();
   hoveredPieceId = null;
   finalScoreTextEl.textContent = `Final Score: ${score}`;
   overlayEl.classList.remove("hidden");
@@ -227,6 +273,7 @@ function spawnNewBatch() {
   hoveredPieceId = null;
   const next = generateBatch(board);
   pieces = next;
+  maybeSpawnTokenBlockForNewBank();
 
   if (pieces.length === 0) {
     endGame();
@@ -235,19 +282,34 @@ function spawnNewBatch() {
 
   if (!hasAnyMoves(board, pieces)) {
     endGame();
+    return;
   }
+
+  maybeOpenPerkOverlayIfNeeded();
 }
 
 function render() {
   renderBoard();
   renderTray();
   renderScore();
+  renderTokenProgress();
 }
 
 function renderScore() {
   scoreEl.textContent = String(score);
   bestScoreEl.textContent = String(bestScore);
   shapeBankBtnEl.textContent = `Shape Bank (${getEnabledShapes().length})`;
+}
+
+function renderTokenProgress() {
+  const stepSize = Math.max(1, nextMilestoneTarget - previousMilestoneTarget);
+  const currentStepProgress = Math.max(
+    0,
+    totalTokensCollected - previousMilestoneTarget
+  );
+  const fillPercent = Math.min(1, currentStepProgress / stepSize) * 100;
+  tokenProgressTextEl.textContent = `${currentStepProgress} / ${stepSize}`;
+  tokenProgressFillEl.style.width = `${fillPercent.toFixed(2)}%`;
 }
 
 function renderBoard() {
@@ -258,6 +320,9 @@ function renderBoard() {
     cell.className = "board-cell";
     if (board[i]) {
       cell.classList.add("occupied");
+      if (tokenBlockIndices.has(i)) {
+        cell.classList.add("token-block");
+      }
     }
   }
 
@@ -625,7 +690,7 @@ function renderTray() {
 }
 
 function beginDrag(event, piece, sourcePieceEl) {
-  if (isGameOver || piece.used || dragState) {
+  if (isGameOver || isPerkOverlayOpen || piece.used || dragState) {
     return;
   }
 
@@ -761,6 +826,10 @@ function placeActivePiece() {
     return;
   }
 
+  const placedIndices = piece.cells.map(([dx, dy]) =>
+    toIndex(dragState.col + dx, dragState.row + dy)
+  );
+
   const { nextBoard, lineCount, clearedCells } = simulatePlacement(
     board,
     piece.cells,
@@ -770,10 +839,16 @@ function placeActivePiece() {
 
   board = nextBoard;
   piece.used = true;
+  updatePlacedBlockTracking(placedIndices, clearedCells);
+  const collectedTokens = collectTokensFromClearedCells(clearedCells);
 
   if (lineCount > 0) {
     spawnClearDebris(clearedCells);
     score += calculateLineScore(lineCount);
+  }
+
+  if (collectedTokens > 0) {
+    registerCollectedTokens(collectedTokens);
   }
 
   if (score > bestScore) {
@@ -789,7 +864,10 @@ function placeActivePiece() {
 
   if (!hasAnyMoves(board, pieces)) {
     endGame();
+    return;
   }
+
+  maybeOpenPerkOverlayIfNeeded();
 }
 
 function calculateLineScore(lineCount) {
@@ -801,6 +879,152 @@ function calculateLineScore(lineCount) {
 
 function hasAnyMoves(currentBoard, activePieces) {
   return activePieces.some((piece) => !piece.used && hasPlacement(currentBoard, piece.cells));
+}
+
+function updatePlacedBlockTracking(placedIndices, clearedCells) {
+  for (let i = 0; i < placedIndices.length; i += 1) {
+    const index = placedIndices[i];
+    if (board[index] === 1) {
+      bankPlacedBlockIndices.add(index);
+    }
+  }
+
+  for (let i = 0; i < clearedCells.length; i += 1) {
+    const index = toIndex(clearedCells[i].x, clearedCells[i].y);
+    bankPlacedBlockIndices.delete(index);
+  }
+}
+
+function maybeSpawnTokenBlockForNewBank() {
+  const eligible = [...bankPlacedBlockIndices].filter(
+    (index) => board[index] === 1 && !tokenBlockIndices.has(index)
+  );
+
+  if (eligible.length > 0 && Math.random() < TOKEN_SPAWN_CHANCE_PER_BANK) {
+    const picked = eligible[Math.floor(Math.random() * eligible.length)];
+    tokenBlockIndices.add(picked);
+  }
+
+  bankPlacedBlockIndices.clear();
+}
+
+function collectTokensFromClearedCells(clearedCells) {
+  let collected = 0;
+  for (let i = 0; i < clearedCells.length; i += 1) {
+    const index = toIndex(clearedCells[i].x, clearedCells[i].y);
+    if (tokenBlockIndices.delete(index)) {
+      collected += 1;
+    }
+  }
+  return collected;
+}
+
+function registerCollectedTokens(amount) {
+  totalTokensCollected += amount;
+
+  while (totalTokensCollected >= nextMilestoneTarget) {
+    pendingPerkSelections += 1;
+    previousMilestoneTarget = nextMilestoneTarget;
+    nextMilestoneTarget += MILESTONE_STEP;
+  }
+}
+
+function buildInitialPerkPool() {
+  return PERK_DEFINITIONS.map((perk) => ({ ...perk }));
+}
+
+function maybeOpenPerkOverlayIfNeeded() {
+  if (isGameOver || isPerkOverlayOpen || pendingPerkSelections <= 0) {
+    return;
+  }
+
+  if (availablePerks.length === 0) {
+    pendingPerkSelections = 0;
+    return;
+  }
+
+  currentPerkChoices = drawPerkChoices();
+  if (currentPerkChoices.length === 0) {
+    pendingPerkSelections = 0;
+    return;
+  }
+
+  isPerkOverlayOpen = true;
+  perkOverlayEl.classList.remove("hidden");
+  renderPerkChoices();
+}
+
+function closePerkOverlay() {
+  isPerkOverlayOpen = false;
+  perkOverlayEl.classList.add("hidden");
+}
+
+function drawPerkChoices() {
+  const pool = availablePerks.slice();
+  shuffleInPlace(pool);
+  return pool.slice(0, Math.min(3, pool.length));
+}
+
+function renderPerkChoices() {
+  perkOptionsEl.innerHTML = "";
+
+  currentPerkChoices.forEach((perk) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "perk-card";
+
+    const icon = document.createElement("div");
+    icon.className = "perk-icon";
+    icon.textContent = perk.icon;
+
+    const info = document.createElement("div");
+    info.className = "perk-info";
+    const name = document.createElement("div");
+    name.className = "perk-name";
+    name.textContent = perk.name;
+    const desc = document.createElement("div");
+    desc.className = "perk-desc";
+    desc.textContent = perk.desc;
+    info.appendChild(name);
+    info.appendChild(desc);
+
+    const stars = document.createElement("div");
+    stars.className = "perk-stars";
+    stars.textContent = perk.stars >= 3 ? "★★★" : "";
+
+    card.appendChild(icon);
+    card.appendChild(info);
+    card.appendChild(stars);
+    card.addEventListener("click", () => {
+      selectPerk(perk.id);
+    });
+    perkOptionsEl.appendChild(card);
+  });
+}
+
+function selectPerk(perkId) {
+  const picked = currentPerkChoices.find((perk) => perk.id === perkId);
+  if (!picked) {
+    return;
+  }
+
+  selectedPerks.push(picked);
+  availablePerks = availablePerks.filter((perk) => perk.id !== perkId);
+  pendingPerkSelections = Math.max(0, pendingPerkSelections - 1);
+  closePerkOverlay();
+
+  if (pendingPerkSelections > 0) {
+    maybeOpenPerkOverlayIfNeeded();
+  }
+}
+
+function reshufflePerkChoices() {
+  if (!isPerkOverlayOpen) {
+    return;
+  }
+
+  currentPerkChoices = drawPerkChoices();
+  renderPerkChoices();
 }
 
 function generateBatch(currentBoard) {
