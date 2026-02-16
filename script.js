@@ -6,6 +6,7 @@ const GENERATOR_CLEARS_STORAGE_KEY = "block-blast-mvp-generator-clears";
 const SHAPE_BANK_STORAGE_KEY = "block-blast-mvp-shape-bank-disabled";
 const DESIGNATED_SPOT_STORAGE_KEY = "block-blast-mvp-designated-spot";
 const PERFECT_FIT_SETTINGS_STORAGE_KEY = "block-blast-mvp-perfect-fit-settings";
+const TOKEN_SETTINGS_STORAGE_KEY = "block-blast-mvp-token-settings";
 const SCORE_PER_LINE = 100;
 const MULTI_LINE_BONUS_PER_EXTRA = 50;
 const BATCH_SIZE = 3;
@@ -17,7 +18,7 @@ const LOW_OCCUPANCY_MAX_BOOST = 2.3;
 const VERY_LOW_OCCUPANCY_THRESHOLD = 0.1;
 const LARGE_SHAPE_MIN_CELLS = 6;
 const VERY_LOW_OCCUPANCY_LARGE_SHAPE_BOOST = 2.2;
-const TOKEN_SPAWN_CHANCE_PER_BANK = 0.1;
+const DEFAULT_TOKEN_SPAWN_CHANCE = 0.2;
 const INITIAL_MILESTONE_TARGET = 3;
 const MILESTONE_STEP = 2;
 
@@ -94,6 +95,7 @@ const designatedSpotToggleEl = document.getElementById("designated-spot-toggle")
 const perfectFitCurrentViewToggleEl = document.getElementById(
   "perfect-fit-current-view-toggle"
 );
+const tokenChanceInputEl = document.getElementById("token-chance-input");
 const perfectFitChanceInputEl = document.getElementById("perfect-fit-chance-input");
 const minPerfectFitInputEl = document.getElementById("min-perfect-fit-input");
 const minCellsFilledInputEl = document.getElementById("min-cells-filled-input");
@@ -117,6 +119,7 @@ let bestScore = loadBestScore();
 let generationConfig = {
   simulateLineClearsBetweenPicks: loadGenerationClearsSetting(),
   showDesignatedSpotOnHover: loadDesignatedSpotSetting(),
+  tokenSpawnChance: loadTokenSpawnChance(),
   ...loadPerfectFitSettings()
 };
 let disabledShapeIds = loadDisabledShapeIds();
@@ -168,9 +171,19 @@ function bindControls() {
     savePerfectFitSettings(generationConfig);
   });
 
+  tokenChanceInputEl.value = String(generationConfig.tokenSpawnChance);
   perfectFitChanceInputEl.value = String(generationConfig.perfectFitChance);
   minPerfectFitInputEl.value = String(generationConfig.minimumPerfectFitPercentage);
   minCellsFilledInputEl.value = String(generationConfig.minimumCellsFilledPercentage);
+
+  tokenChanceInputEl.addEventListener("change", () => {
+    generationConfig.tokenSpawnChance = parseDecimalSetting(
+      tokenChanceInputEl.value,
+      generationConfig.tokenSpawnChance
+    );
+    tokenChanceInputEl.value = formatDecimal(generationConfig.tokenSpawnChance);
+    saveTokenSpawnChance(generationConfig.tokenSpawnChance);
+  });
 
   perfectFitChanceInputEl.addEventListener("change", () => {
     generationConfig.perfectFitChance = parseDecimalSetting(
@@ -901,7 +914,7 @@ function maybeAssignTokenToShapeBank() {
     pieces[i].tokenCell = null;
   }
 
-  if (Math.random() >= TOKEN_SPAWN_CHANCE_PER_BANK) {
+  if (Math.random() >= generationConfig.tokenSpawnChance) {
     return;
   }
 
@@ -1765,6 +1778,13 @@ function loadDesignatedSpotSetting() {
   return stored === "1";
 }
 
+function loadTokenSpawnChance() {
+  return parseDecimalSetting(
+    window.localStorage.getItem(TOKEN_SETTINGS_STORAGE_KEY),
+    DEFAULT_TOKEN_SPAWN_CHANCE
+  );
+}
+
 function loadPerfectFitSettings() {
   const defaults = {
     perfectFitChance: DEFAULT_PERFECT_FIT_CHANCE,
@@ -1838,6 +1858,10 @@ function saveDesignatedSpotSetting(isEnabled) {
     DESIGNATED_SPOT_STORAGE_KEY,
     isEnabled ? "1" : "0"
   );
+}
+
+function saveTokenSpawnChance(value) {
+  window.localStorage.setItem(TOKEN_SETTINGS_STORAGE_KEY, String(value));
 }
 
 function savePerfectFitSettings(config) {
