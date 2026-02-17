@@ -19,8 +19,7 @@ const VERY_LOW_OCCUPANCY_THRESHOLD = 0.1;
 const LARGE_SHAPE_MIN_CELLS = 6;
 const VERY_LOW_OCCUPANCY_LARGE_SHAPE_BOOST = 2.2;
 const DEFAULT_TOKEN_SPAWN_CHANCE = 0.2;
-const INITIAL_MILESTONE_TARGET = 3;
-const MILESTONE_STEP = 2;
+const INITIAL_MILESTONE_REQUIREMENT = 3;
 
 const SHAPES = [
   { id: "domino_h", cells: [[0, 0], [1, 0]] },
@@ -130,7 +129,8 @@ let hoveredPieceId = null;
 let tokenBlockIndices = new Set();
 let totalTokensCollected = 0;
 let previousMilestoneTarget = 0;
-let nextMilestoneTarget = INITIAL_MILESTONE_TARGET;
+let currentMilestoneRequirement = INITIAL_MILESTONE_REQUIREMENT;
+let nextMilestoneTarget = INITIAL_MILESTONE_REQUIREMENT;
 let pendingPerkSelections = 0;
 let isPerkOverlayOpen = false;
 let availablePerks = buildInitialPerkPool();
@@ -257,7 +257,8 @@ function startNewGame() {
   tokenBlockIndices = new Set();
   totalTokensCollected = 0;
   previousMilestoneTarget = 0;
-  nextMilestoneTarget = INITIAL_MILESTONE_TARGET;
+  currentMilestoneRequirement = INITIAL_MILESTONE_REQUIREMENT;
+  nextMilestoneTarget = INITIAL_MILESTONE_REQUIREMENT;
   pendingPerkSelections = 0;
   availablePerks = buildInitialPerkPool();
   selectedPerks = [];
@@ -944,7 +945,8 @@ function registerCollectedTokens(amount) {
   while (totalTokensCollected >= nextMilestoneTarget) {
     pendingPerkSelections += 1;
     previousMilestoneTarget = nextMilestoneTarget;
-    nextMilestoneTarget += MILESTONE_STEP;
+    currentMilestoneRequirement += 1;
+    nextMilestoneTarget = previousMilestoneTarget + currentMilestoneRequirement;
   }
 }
 

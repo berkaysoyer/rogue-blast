@@ -21,7 +21,7 @@ Simple web-based Block Blast style prototype:
 - Roguelite prototype layer:
   - Token gem can appear inside a random block of the new shape bank when generated (configurable, default 20%, max 1 token per bank roll)
   - Clearing a block with token collects it
-  - Progress bar above pieces tracks milestone progress (3, 5, 7, 9, ...)
+  - Progress bar above pieces tracks milestone progress with increasing requirement per perk (3, 4, 5, 6, ...)
   - Milestone opens perk-pick overlay (3 options + free reshuffle RV button)
   - Picked perks are removed from future offerings
   - Dummy perk effects for now (names/icons/stars only)

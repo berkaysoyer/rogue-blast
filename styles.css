@@ -267,6 +267,8 @@ p {
   padding: 10px;
   display: grid;
   gap: 7px;
+  width: calc((var(--cell-size) * 8 + var(--cell-gap) * 7 + 22px) / 2);
+  max-width: 100%;
 }
 
 .token-track-head {
