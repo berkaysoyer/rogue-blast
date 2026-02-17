@@ -42,9 +42,9 @@ Simple web-based Block Blast style prototype:
   - In simulated mode, perfect-fit picks are simulated sequentially without simulating clears
   - Weighted picks are not simulated when determining perfect-fit picks
   - Labels:
-    - `Perfect Fit` (current-board mode)
-    - `Perfect Fit (Simulated)` (simulated mode)
-    - `Weighted`
+    - `Perfect Fit` for perfect-fit pieces
+    - no label for weighted pieces
+  - Perfect-fit pieces get a subtle tray glow + first-appearance pop animation
 - Shape Bank modal:
   - View all available shapes
   - Includes larger blocks like `2x3`, `3x2`, and `3x3`

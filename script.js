@@ -136,6 +136,7 @@ let isPerkOverlayOpen = false;
 let availablePerks = buildInitialPerkPool();
 let selectedPerks = [];
 let currentPerkChoices = [];
+let newlyAppearedPerfectFitIds = new Set();
 
 init();
 
@@ -263,6 +264,7 @@ function startNewGame() {
   availablePerks = buildInitialPerkPool();
   selectedPerks = [];
   currentPerkChoices = [];
+  newlyAppearedPerfectFitIds = new Set();
   board = createEmptyBoard();
   score = 0;
   isGameOver = false;
@@ -285,6 +287,9 @@ function spawnNewBatch() {
   hoveredPieceId = null;
   const next = generateBatch(board);
   pieces = next;
+  newlyAppearedPerfectFitIds = new Set(
+    pieces.filter((piece) => isPerfectFitPiece(piece)).map((piece) => piece.id)
+  );
 
   if (pieces.length === 0) {
     endGame();
@@ -583,6 +588,9 @@ function syncCurrentTrayWithShapeBank() {
   }
 
   pieces = generateBatch(board);
+  newlyAppearedPerfectFitIds = new Set(
+    pieces.filter((piece) => isPerfectFitPiece(piece)).map((piece) => piece.id)
+  );
   if (pieces.length === 0) {
     endGame();
     return;
@@ -655,6 +663,14 @@ function renderTray() {
   pieces.forEach((piece) => {
     const slot = document.createElement("div");
     slot.className = "piece-slot";
+    const isPerfectFit = isPerfectFitPiece(piece);
+
+    if (isPerfectFit) {
+      slot.classList.add("perfect-fit-slot");
+      if (newlyAppearedPerfectFitIds.has(piece.id)) {
+        slot.classList.add("perfect-fit-new");
+      }
+    }
 
     if (piece.used || isGameOver) {
       slot.classList.add("used");
@@ -669,25 +685,15 @@ function renderTray() {
     );
     slot.appendChild(pieceEl);
 
-    const generationLabelEl = document.createElement("div");
-    generationLabelEl.className = "piece-generation-label";
-    if (piece.generationType === "perfect_fit") {
+    if (isPerfectFit) {
+      const generationLabelEl = document.createElement("div");
+      generationLabelEl.className = "piece-generation-label";
       generationLabelEl.classList.add("perfect");
       generationLabelEl.textContent = "Perfect Fit";
-    } else if (piece.generationType === "perfect_fit_simulated") {
-      generationLabelEl.classList.add("perfect");
-      generationLabelEl.textContent = "Perfect Fit (Simulated)";
-    } else {
-      generationLabelEl.classList.add("weighted");
-      generationLabelEl.textContent = "Weighted";
+      slot.appendChild(generationLabelEl);
     }
-    slot.appendChild(generationLabelEl);
 
-    if (
-      (piece.generationType === "perfect_fit" ||
-        piece.generationType === "perfect_fit_simulated") &&
-      piece.perfectFitMetrics
-    ) {
+    if (isPerfectFit && piece.perfectFitMetrics) {
       const detailEl = document.createElement("div");
       detailEl.className = "piece-generation-detail";
       detailEl.textContent =
@@ -710,6 +716,17 @@ function renderTray() {
 
     trayEl.appendChild(slot);
   });
+
+  if (newlyAppearedPerfectFitIds.size > 0) {
+    newlyAppearedPerfectFitIds.clear();
+  }
+}
+
+function isPerfectFitPiece(piece) {
+  return (
+    piece.generationType === "perfect_fit" ||
+    piece.generationType === "perfect_fit_simulated"
+  );
 }
 
 function beginDrag(event, piece, sourcePieceEl) {
